@@ -58,12 +58,12 @@ const styles = `
 .ducklab-explore-toggle::before { display:block; width:0; height:0; margin:auto; content:''; }
 .ducklab-explore-toggle[aria-expanded="false"]::before { border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:6px solid #000; }
 .ducklab-explore-toggle[aria-expanded="true"]::before { border-right:4px solid transparent; border-left:4px solid transparent; border-top:6px solid #000; }
-.ducklab-footer { display:flex; gap:8px; align-items:center; padding:8px; opacity:.8; } .ducklab-footer .spacer { flex:1; }
+.ducklab-footer { display:flex; gap:8px; align-items:center; padding:8px; color:var(--vscode-descriptionForeground); } .ducklab-footer .spacer { flex:1; }
 .ducklab-footer-actions { position:relative; }
 .ducklab-footer-actions > summary { list-style:none; cursor:pointer; padding:2px 6px; border-radius:3px; font-size:18px; line-height:1; }
 .ducklab-footer-actions > summary::-webkit-details-marker { display:none; }
 .ducklab-footer-actions > summary:hover { background:var(--vscode-list-hoverBackground); }
-.ducklab-footer-actions-panel { position:fixed; z-index:10003; min-width:140px; padding:4px; background:var(--vscode-menu-background); color:var(--vscode-menu-foreground); border:1px solid var(--vscode-menu-border); border-radius:4px; box-shadow:0 4px 14px #0005; }
+.ducklab-footer-actions-panel { position:fixed; z-index:10003; min-width:140px; padding:4px; background:var(--vscode-editorWidget-background, var(--vscode-editor-background)); color:var(--vscode-editorWidget-foreground, var(--vscode-foreground)); border:1px solid var(--vscode-menu-border); border-radius:4px; box-shadow:0 4px 14px #0005; }
 .ducklab-footer-actions-panel button { display:block; width:100%; box-sizing:border-box; padding:6px 8px; border:0; background:transparent; color:inherit; text-align:left; white-space:nowrap; cursor:pointer; }
 .ducklab-footer-actions-panel button:hover { background:var(--vscode-list-hoverBackground); }
 `;
@@ -356,7 +356,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         pageSize.append(option);
     }
     const footerSpacer = create('span', 'spacer');
-    footer.append(status, footerActions, footerSpacer, pageSize, previous, next);
+    footer.append(status, footerSpacer, pageSize, previous, next, footerActions);
     footerActions.addEventListener('click', event => event.stopPropagation(), { signal });
     footerActions.addEventListener('toggle', () => {
         if (!footerActions.open) return;
@@ -367,7 +367,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
             const panelWidth = footerActionsPanel.offsetWidth || 140;
             const panelHeight = footerActionsPanel.offsetHeight || 40;
             const top = rect.top >= panelHeight + 8 ? rect.top - panelHeight - 4 : Math.min(window.innerHeight - panelHeight - 8, rect.bottom + 4);
-            const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
+            const left = Math.max(8, Math.min(rect.right - panelWidth, window.innerWidth - panelWidth - 8));
             footerActionsPanel.style.top = `${top}px`;
             footerActionsPanel.style.left = `${left}px`;
         });
