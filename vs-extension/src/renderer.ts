@@ -1,7 +1,10 @@
 import type { ActivationFunction, OutputItem, RendererContext } from 'vscode-notebook-renderer';
 
 type Column = { name: string; type?: string; nativeType?: string };
-type TableData = { columns: Column[]; values: Record<string, unknown>[] };
+type TableStats = { nonNull: number; min?: number; max?: number; bins?: number[] };
+type TableData = { queryId?: string; columns: Column[]; values: Record<string, unknown>[]; totalRows?: number; page?: number; pageSize?: number; stats?: Record<string, TableStats> };
+type TableRequest = { kind: 'ducklab.table.request'; requestId: string; queryId: string; operation: 'page' | 'distinct'; page?: number; pageSize?: number; filters?: { search: string; text: Record<string, string>; values: Record<string, string[]> }; sortColumn?: string; sortAscending?: boolean; column?: string; valueSearch?: string; includeStats?: boolean };
+type TableResponse = { kind: 'ducklab.table.response'; requestId: string; queryId: string; ok: boolean; data?: Partial<TableData> & { distinctValues?: string[]; hasMoreDistinct?: boolean }; error?: string };
 
 const styles = `
 .ducklab-table { color: var(--vscode-foreground); font: 12px var(--vscode-font-family); border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow: visible; }
@@ -116,19 +119,32 @@ function makeHistogram(bins: number[], columnName: string, min: number, max: num
     return histogram;
 }
 
-function appendColumnExplore(header: HTMLTableCellElement, column: Column, rows: Record<string, unknown>[]): void {
+function appendColumnExplore(header: HTMLTableCellElement, column: Column, rows: Record<string, unknown>[], stats?: TableStats, statsPending = false): void {
     const nativeType = column.nativeType ?? '';
     const isNumeric = column.type === 'number' || /(?:TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|FLOAT|DOUBLE|DECIMAL)/i.test(nativeType);
     const isTemporal = /(?:DATE|TIME|TIMESTAMP)/i.test(nativeType) || /^(?:date|datetime|datetime_tz)$/i.test(column.type ?? '');
-    const numbers = isNumeric
+    const numbers = isNumeric && !stats
         ? rows.map(row => row[column.name]).filter(value => value !== null && value !== undefined && value !== '').map(Number).filter(Number.isFinite)
         : [];
-    const temporalValues = isTemporal
+    const temporalValues = isTemporal && !stats
         ? rows.map(row => temporalValue(row[column.name], nativeType)).filter((value): value is number => value !== null)
         : [];
 
     header.append(create('span', 'ducklab-column-type', formatDataType(column)));
-    if (numbers.length) {
+    if (statsPending) {
+        header.append(create('span', 'ducklab-column-count', 'Calculating…'));
+    } else if (stats && stats.nonNull === 0) {
+        header.append(create('span', 'ducklab-column-count', '0 non-null'));
+    } else if (stats?.bins && stats.min !== undefined && stats.max !== undefined && (isNumeric || isTemporal)) {
+        header.append(makeHistogram(stats.bins, column.name, stats.min, stats.max,
+            isTemporal ? value => formatTemporalBoundary(value, nativeType) : formatNumericBoundary));
+        const range = create('div', 'ducklab-hist-range');
+        const formatBoundary = isTemporal ? (value: number) => formatTemporalBoundary(value, nativeType) : formatNumericBoundary;
+        range.append(create('span', '', formatBoundary(stats.min)), create('span', '', formatBoundary(stats.max)));
+        header.append(range);
+    } else if (stats) {
+        header.append(create('span', 'ducklab-column-count', `${stats.nonNull.toLocaleString()} non-null`));
+    } else if (numbers.length) {
         let min = Number.POSITIVE_INFINITY;
         let max = Number.NEGATIVE_INFINITY;
         for (const value of numbers) {
@@ -206,9 +222,14 @@ function create<K extends keyof HTMLElementTagNameMap>(tag: K, className?: strin
     return element;
 }
 
-function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): void {
+function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, context: RendererContext<unknown>, onMessage: (listener: (message: TableResponse) => void) => () => void): void {
     const visible = new Set(data.columns.map(column => column.name));
     const state = { query: '', page: 0, pageSize: 10, sortColumn: '', sortAscending: true, explore: true };
+    let totalRows = data.totalRows ?? data.values.length;
+    let currentStats = data.stats;
+    let requestNumber = 0;
+    let loadError = '';
+    let searchTimer: ReturnType<typeof setTimeout> | undefined;
     const columnTextFilters = new Map<string, string>();
     const columnValueFilters = new Map<string, Set<string>>();
     const columnFormats = new Map<string, string>();
@@ -258,7 +279,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
     }, { signal });
     const explore = create('button', '', 'Explore');
     explore.type = 'button';
-    explore.addEventListener('click', () => { state.explore = !state.explore; draw(); }, { signal });
+    explore.addEventListener('click', () => { state.explore = !state.explore; if (data.queryId) void refresh(); else draw(); }, { signal });
     const exportButton = create('button', '', 'Export CSV');
     exportButton.type = 'button';
     const toolbarSpacer = create('span');
@@ -308,7 +329,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
     document.addEventListener('pointerup', () => { draggingSelection = false; }, { signal });
     grid.addEventListener('copy', event => {
         if (!selection || !event.clipboardData) return;
-        const currentRows = filteredRows().slice(state.page * state.pageSize, (state.page + 1) * state.pageSize);
+        const currentRows = data.queryId ? filteredRows() : filteredRows().slice(state.page * state.pageSize, (state.page + 1) * state.pageSize);
         const currentColumns = data.columns.filter(column => visible.has(column.name));
         const firstRow = Math.min(selection.startRow, selection.endRow);
         const lastRow = Math.max(selection.startRow, selection.endRow);
@@ -327,18 +348,36 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         event.preventDefault();
     }, { signal });
 
-    search.addEventListener('input', () => { state.query = search.value.toLocaleLowerCase(); state.page = 0; draw(); }, { signal });
-    previous.addEventListener('click', () => { state.page = Math.max(0, state.page - 1); draw(); }, { signal });
-    next.addEventListener('click', () => { state.page++; draw(); }, { signal });
-    pageSize.addEventListener('change', () => { state.pageSize = Number(pageSize.value); state.page = 0; draw(); }, { signal });
+    search.addEventListener('input', () => {
+        state.query = search.value;
+        state.page = 0;
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => { void refresh(); }, data.queryId ? 250 : 0);
+    }, { signal });
+    previous.addEventListener('click', () => { state.page = Math.max(0, state.page - 1); void refresh(); }, { signal });
+    next.addEventListener('click', () => { state.page++; void refresh(); }, { signal });
+    pageSize.addEventListener('change', () => { state.pageSize = Number(pageSize.value); state.page = 0; void refresh(); }, { signal });
     exportButton.addEventListener('click', () => {
         const columns = data.columns.filter(column => visible.has(column.name));
-        const csv = [columns.map(column => JSON.stringify(column.name)).join(','), ...filteredRows().map(row => columns.map(column => JSON.stringify(formatValue(row[column.name]))).join(','))].join('\r\n');
-        const link = create('a');
-        link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-        link.download = 'ducklab-result.csv';
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(link.href), 0);
+        void (async () => {
+            const csvParts = [columns.map(column => JSON.stringify(column.name)).join(',') + '\r\n'];
+            if (data.queryId) {
+                const pageCount = Math.ceil(totalRows / 100);
+                for (let page = 0; page < pageCount; page++) {
+                    const response = await sendRequest({ operation: 'page', page, pageSize: 100, filters: filtersForRequest(),
+                        sortColumn: state.sortColumn || undefined, sortAscending: state.sortAscending, includeStats: false });
+                    if (!response?.ok || !response.data) { loadError = response?.error ?? 'CSV export failed.'; draw(); return; }
+                    csvParts.push(...(response.data.values ?? []).map(row => columns.map(column => JSON.stringify(formatValue(row[column.name]))).join(',') + '\r\n'));
+                }
+            } else {
+                csvParts.push(...filteredRows().map(row => columns.map(column => JSON.stringify(formatValue(row[column.name]))).join(',') + '\r\n'));
+            }
+            const link = create('a');
+            link.href = URL.createObjectURL(new Blob(csvParts, { type: 'text/csv;charset=utf-8' }));
+            link.download = 'ducklab-result.csv';
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(link.href), 0);
+        })();
     }, { signal });
 
     function createColumnActions(column: Column): HTMLDetailsElement {
@@ -387,8 +426,8 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
             return element;
         };
 
-        addAction('Asc', () => { state.sortColumn = column.name; state.sortAscending = true; state.page = 0; draw(); });
-        addAction('Desc', () => { state.sortColumn = column.name; state.sortAscending = false; state.page = 0; draw(); });
+        addAction('Asc', () => { state.sortColumn = column.name; state.sortAscending = true; state.page = 0; void refresh(); });
+        addAction('Desc', () => { state.sortColumn = column.name; state.sortAscending = false; state.page = 0; void refresh(); });
         addAction('Copy column name', () => { void copyText(column.name); });
         const freezeSeparator = separator();
         addAction(frozenColumn?.name === column.name && frozenColumn.side === 'left' ? 'Unfreeze left' : 'Freeze left', () => {
@@ -451,7 +490,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
             if (query) columnTextFilters.set(column.name, query);
             else columnTextFilters.delete(column.name);
             state.page = 0;
-            draw();
+            void refresh();
         }, { signal });
         filterPanel.append(filterInput, applyFilter);
         filterMenu.append(filterPanel);
@@ -475,7 +514,10 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         valuesMenu.append(valuesPanel);
         let allValues: string[] = [];
         let pendingValues = new Set<string>();
+        let hasMoreValues = false;
+        let valueSearchVersion = 0;
         const renderValues = () => {
+            selectAll.textContent = hasMoreValues ? 'Select all shown' : 'Select all';
             const matching = allValues.filter(value => value.toLocaleLowerCase().includes(valueSearch.value.toLocaleLowerCase()));
             valuesList.replaceChildren();
             for (const value of matching.slice(0, 200)) {
@@ -491,18 +533,37 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
                 label.append(checkbox, document.createTextNode(value));
                 valuesList.append(label);
             }
-            valueStatus.textContent = `${pendingValues.size} of ${allValues.length} values selected${matching.length > 200 ? ` · showing 200 of ${matching.length}` : ''}`;
+            valueStatus.textContent = `${pendingValues.size} selected from ${allValues.length} values${hasMoreValues ? ' · more values exist; search to narrow' : ''}${matching.length > 200 ? ` · showing 200 of ${matching.length}` : ''}`;
         };
         valuesMenu.addEventListener('toggle', () => {
             if (!valuesMenu.open) return;
-            if (!distinctValueCache.has(column.name)) {
+            if (data.queryId) {
+                const version = ++valueSearchVersion;
+                void sendRequest({ operation: 'distinct', column: column.name, valueSearch: valueSearch.value, filters: filtersForRequest() }).then(response => {
+                    if (version !== valueSearchVersion) return;
+                    if (response?.ok && response.data?.distinctValues) {
+                        allValues = response.data.distinctValues;
+                        hasMoreValues = response.data.hasMoreDistinct ?? false;
+                        pendingValues = new Set(columnValueFilters.get(column.name) ?? (hasMoreValues ? [] : allValues));
+                        renderValues();
+                    } else if (response?.error) valueStatus.textContent = response.error;
+                });
+            } else if (!distinctValueCache.has(column.name)) {
                 distinctValueCache.set(column.name, [...new Set(data.values.map(row => formatValue(row[column.name])))].sort((a, b) => a.localeCompare(b)));
+                allValues = distinctValueCache.get(column.name) ?? [];
+                hasMoreValues = false;
             }
-            allValues = distinctValueCache.get(column.name) ?? [];
             pendingValues = new Set(columnValueFilters.get(column.name) ?? allValues);
             renderValues();
         }, { signal });
-        valueSearch.addEventListener('input', renderValues, { signal });
+        valueSearch.addEventListener('input', () => {
+            if (!data.queryId) { renderValues(); return; }
+            const version = ++valueSearchVersion;
+            void sendRequest({ operation: 'distinct', column: column.name, valueSearch: valueSearch.value, filters: filtersForRequest() }).then(response => {
+                if (version !== valueSearchVersion) return;
+                if (response?.ok && response.data?.distinctValues) { allValues = response.data.distinctValues; hasMoreValues = response.data.hasMoreDistinct ?? false; renderValues(); }
+            });
+        }, { signal });
         selectAll.addEventListener('click', event => {
             event.stopPropagation();
             pendingValues = new Set(allValues);
@@ -517,10 +578,10 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         applyValues.type = 'button';
         applyValues.addEventListener('click', event => {
             event.stopPropagation();
-            if (pendingValues.size === allValues.length) columnValueFilters.delete(column.name);
+            if (pendingValues.size === allValues.length && !hasMoreValues) columnValueFilters.delete(column.name);
             else columnValueFilters.set(column.name, new Set(pendingValues));
             state.page = 0;
-            draw();
+            void refresh();
         }, { signal });
         valueActions.append(applyValues);
         filterBlock.append(valuesMenu);
@@ -529,7 +590,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
             columnTextFilters.delete(column.name);
             columnValueFilters.delete(column.name);
             state.page = 0;
-            draw();
+            void refresh();
         });
         filterBlock.append(clearFilters);
         panel.insertBefore(filterBlock, freezeSeparator);
@@ -537,9 +598,60 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         return actions;
     }
 
+    function filtersForRequest() {
+        return {
+            search: state.query,
+            text: Object.fromEntries(columnTextFilters),
+            values: Object.fromEntries([...columnValueFilters].map(([name, values]) => [name, [...values]]))
+        };
+    }
+
+    const pending = new Map<string, (response: TableResponse) => void>();
+    const removeMessageListener = onMessage(response => {
+        const resolve = pending.get(response.requestId);
+        if (!resolve) return;
+        pending.delete(response.requestId);
+        resolve(response);
+    });
+    signal.addEventListener('abort', () => {
+        removeMessageListener();
+        pending.clear();
+    }, { once: true });
+
+    function sendRequest(request: Omit<TableRequest, 'kind' | 'requestId' | 'queryId'>): Promise<TableResponse | null> {
+        if (!data.queryId || !context.postMessage) return Promise.resolve(null);
+        const requestId = `${Date.now()}-${++requestNumber}`;
+        return new Promise(resolve => {
+            const timer = setTimeout(() => { pending.delete(requestId); resolve(null); }, 30000);
+            pending.set(requestId, response => { clearTimeout(timer); resolve(response); });
+            context.postMessage!({ kind: 'ducklab.table.request', requestId, queryId: data.queryId, ...request } satisfies TableRequest);
+        });
+    }
+
+    let refreshVersion = 0;
+    async function refresh(): Promise<void> {
+        if (!data.queryId) { draw(); return; }
+        const version = ++refreshVersion;
+        const response = await sendRequest({ operation: 'page', page: state.page, pageSize: state.pageSize,
+            filters: filtersForRequest(), sortColumn: state.sortColumn || undefined, sortAscending: state.sortAscending, includeStats: state.explore });
+        if (version !== refreshVersion) return;
+        if (!response?.ok || !response.data) {
+            loadError = response?.error ?? 'Could not load this page.';
+            draw();
+            return;
+        }
+        loadError = '';
+        data.values = response.data.values ?? [];
+        totalRows = response.data.totalRows ?? 0;
+        currentStats = response.data.stats;
+        state.page = response.data.page ?? state.page;
+        draw();
+    }
+
     function filteredRows(): Record<string, unknown>[] {
+        if (data.queryId) return data.values;
         let rows = data.values.filter(row => {
-            if (state.query && !data.columns.some(column => formatValue(row[column.name]).toLocaleLowerCase().includes(state.query))) return false;
+            if (state.query && !data.columns.some(column => formatValue(row[column.name]).toLocaleLowerCase().includes(state.query.toLocaleLowerCase()))) return false;
             for (const [columnName, query] of columnTextFilters) {
                 if (!formatValue(row[columnName]).toLocaleLowerCase().includes(query.toLocaleLowerCase())) return false;
             }
@@ -577,7 +689,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
     function draw(): void {
         selection = null;
         const rows = filteredRows();
-        const pages = Math.max(1, Math.ceil(rows.length / state.pageSize));
+        const pages = Math.max(1, Math.ceil((data.queryId ? totalRows : rows.length) / state.pageSize));
         state.page = Math.min(state.page, pages - 1);
         const columns = data.columns.filter(column => visible.has(column.name));
         grid.replaceChildren();
@@ -593,17 +705,17 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
                 if (state.sortColumn === column.name) state.sortAscending = !state.sortAscending;
                 else { state.sortColumn = column.name; state.sortAscending = true; }
                 state.page = 0;
-                draw();
+                void refresh();
             }, { signal });
             th.append(columnName);
-            if (state.explore) appendColumnExplore(th, column, rows);
+            if (state.explore) appendColumnExplore(th, column, rows, currentStats?.[column.name], Boolean(data.queryId && !currentStats));
             th.append(createColumnActions(column));
             headRow.append(th);
         }
         head.append(headRow);
         const body = create('tbody');
         const start = state.page * state.pageSize;
-        for (const [rowIndex, row] of rows.slice(start, start + state.pageSize).entries()) {
+        for (const [rowIndex, row] of (data.queryId ? rows : rows.slice(start, start + state.pageSize)).entries()) {
             const tr = create('tr');
             for (const [columnIndex, column] of columns.entries()) {
                 const td = create('td', wrappedColumns.has(column.name) ? 'ducklab-wrap' : '', formatCellValue(row[column.name], columnFormats.get(column.name)));
@@ -615,7 +727,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         }
         grid.append(head, body);
         applyFreeze(columns);
-        status.textContent = `${rows.length.toLocaleString()} rows, ${columns.length} visible of ${data.columns.length} columns · Page ${state.page + 1} of ${pages}`;
+        status.textContent = `${loadError || `${(data.queryId ? totalRows : rows.length).toLocaleString()} rows, ${columns.length} visible of ${data.columns.length} columns`} · Page ${state.page + 1} of ${pages}`;
         previous.disabled = state.page === 0;
         next.disabled = state.page >= pages - 1;
     }
@@ -638,16 +750,30 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         applyAt(frozenIndex, 0);
     }
     draw();
+    if (data.queryId && state.explore) void refresh();
 }
 
-export const activate: ActivationFunction<unknown> = (_context: RendererContext<unknown>) => ({
-    renderOutputItem(outputItem: OutputItem, element: HTMLElement, signal: AbortSignal) {
-        try {
-            const data = outputItem.json() as TableData;
-            if (!Array.isArray(data.columns) || !Array.isArray(data.values)) throw new Error('Invalid table output payload');
-            renderTable(data, element, signal);
-        } catch (error) {
-            element.textContent = `Ducklab table renderer error: ${error instanceof Error ? error.message : String(error)}`;
+export const activate: ActivationFunction<unknown> = (context: RendererContext<unknown>) => {
+    const listeners: Array<(message: TableResponse) => void> = [];
+    context.onDidReceiveMessage?.(message => {
+        const response = message as TableResponse;
+        if (response?.kind === 'ducklab.table.response') listeners.forEach(listener => listener(response));
+    });
+    return {
+        renderOutputItem(outputItem: OutputItem, element: HTMLElement, signal: AbortSignal) {
+            try {
+                const data = outputItem.json() as TableData;
+                if (!Array.isArray(data.columns) || !Array.isArray(data.values)) throw new Error('Invalid table output payload');
+                renderTable(data, element, signal, context, listener => {
+                    listeners.push(listener);
+                    return () => {
+                        const index = listeners.indexOf(listener);
+                        if (index >= 0) listeners.splice(index, 1);
+                    };
+                });
+            } catch (error) {
+                element.textContent = `Ducklab table renderer error: ${error instanceof Error ? error.message : String(error)}`;
+            }
         }
-    }
-});
+    };
+};

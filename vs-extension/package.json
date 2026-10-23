@@ -39,6 +39,7 @@
   "type": "commonjs",
   "main": "./out/index.js",
   "activationEvents": [
+    "onRenderer:ducklab.tableRenderer",
     "onNotebook:ipynb-ducklab",
     "onNotebook:isql"
   ],
@@ -60,7 +61,7 @@
         "displayName": "Ducklab Interactive Table",
         "mimeTypes": ["application/vnd.ducklab.table+json"],
         "entrypoint": "./out/renderer.js",
-        "requiresMessaging": "never"
+        "requiresMessaging": "always"
       }
     ],
     "commands": [

@@ -71,6 +71,10 @@ ATTACH 'host=$PGHOST dbname=$PGDATABASE user=$PGUSER password=$PGPASSWORD' AS du
 
 Keep credentials in `.env`, which is ignored by Git. Variable values are substituted as SQL text and must be valid in the surrounding SQL syntax.
 
+#### Large query results
+
+Single-query tabular results use backend pagination in the SQL Only, Python/SQL, and PySpark/SQL kernels. Only the visible page is sent to the interactive table; page navigation, global search, column filters, sorting, row counts, and Explore statistics are evaluated by the kernel. Value-filter suggestions are loaded on demand and capped at 200 per search. CSV export fetches the filtered result in pages. DDL and multi-statement cells keep their existing output behavior.
+
 <img src="./assets/sql_query.png">
 
 #### Using Cell Magics
