@@ -59,6 +59,18 @@ DuckLab for VS Code provides data analysis features for SQL, PySpark and Python.
 2. Select kernel `SQL Only`
 3. Run SQL queries e.g. `select * from 'data/MOCK_DATA.csv';`
 
+#### SQL environment variables
+
+Place a `.env` file next to the `.isql` notebook to provide values for SQL cells. Ducklab expands `$NAME` and `${NAME}` before running SQL in the SQL Only, Python/SQL, and PySpark/SQL kernels. Python cells are not modified. The `.env` file is re-read for each SQL cell; its values override matching extension process environment variables. If a referenced name is missing from both sources, execution stops and reports the missing name.
+
+For example, copy `sample/.env.example` to the directory containing your notebook and use:
+
+```sql
+ATTACH 'host=$PGHOST dbname=$PGDATABASE user=$PGUSER password=$PGPASSWORD' AS duckspm (TYPE postgres);
+```
+
+Keep credentials in `.env`, which is ignored by Git. Variable values are substituted as SQL text and must be valid in the surrounding SQL syntax.
+
 <img src="./assets/sql_query.png">
 
 #### Using Cell Magics
