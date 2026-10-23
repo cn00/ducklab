@@ -5,6 +5,7 @@ type TableStats = { nonNull: number; min?: number; max?: number; bins?: number[]
 type TableData = { queryId?: string; columns: Column[]; values: Record<string, unknown>[]; totalRows?: number; page?: number; pageSize?: number; stats?: Record<string, TableStats> };
 type TableRequest = { kind: 'ducklab.table.request'; requestId: string; queryId: string; operation: 'page' | 'distinct'; page?: number; pageSize?: number; filters?: { search: string; text: Record<string, string>; values: Record<string, string[]> }; sortColumn?: string; sortAscending?: boolean; column?: string; valueSearch?: string; includeStats?: boolean };
 type TableResponse = { kind: 'ducklab.table.response'; requestId: string; queryId: string; ok: boolean; data?: Partial<TableData> & { distinctValues?: string[]; hasMoreDistinct?: boolean }; error?: string };
+const ROW_NUMBER_WIDTH = 42;
 
 const styles = `
 .ducklab-table { color: var(--vscode-foreground); font: 12px var(--vscode-font-family); border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow: visible; }
@@ -39,8 +40,12 @@ const styles = `
 .ducklab-grid th.ducklab-menu-open { z-index:10001; }
 .ducklab-grid .ducklab-frozen { position:sticky; z-index:2; background:var(--vscode-editor-background); }
 .ducklab-grid th.ducklab-frozen { z-index:5; }
+.ducklab-grid .ducklab-row-number { box-sizing:border-box; width:${ROW_NUMBER_WIDTH}px; min-width:${ROW_NUMBER_WIDTH}px; max-width:${ROW_NUMBER_WIDTH}px; text-align:right; color:var(--vscode-descriptionForeground); background:var(--vscode-editor-background); }
+.ducklab-grid th.ducklab-row-number { position:sticky; left:0; z-index:6; }
+.ducklab-grid td.ducklab-row-number { position:sticky; left:0; z-index:3; border-right:1px solid var(--vscode-panel-border); }
 .ducklab-grid .ducklab-wrap { white-space:normal; max-width:240px; overflow-wrap:anywhere; }
 .ducklab-grid tbody tr:hover { background:var(--vscode-list-hoverBackground); }
+.ducklab-grid tbody tr:hover .ducklab-row-number { background:var(--vscode-list-hoverBackground); }
 .ducklab-grid td.ducklab-selected { background:var(--vscode-editor-selectionBackground, var(--vscode-list-activeSelectionBackground)); color:var(--vscode-editor-selectionForeground, var(--vscode-foreground)); }
 .ducklab-footer { display:flex; gap:8px; align-items:center; padding:8px; opacity:.8; } .ducklab-footer .spacer { flex:1; }
 `;
@@ -695,6 +700,9 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         grid.replaceChildren();
         const head = create('thead');
         const headRow = create('tr');
+        const rowNumberHeader = create('th', 'ducklab-row-number', '#');
+        rowNumberHeader.setAttribute('aria-label', 'Row number');
+        headRow.append(rowNumberHeader);
         for (const column of columns) {
             const th = create('th');
             if (wrappedColumns.has(column.name)) th.classList.add('ducklab-wrap');
@@ -717,6 +725,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         const start = state.page * state.pageSize;
         for (const [rowIndex, row] of (data.queryId ? rows : rows.slice(start, start + state.pageSize)).entries()) {
             const tr = create('tr');
+            tr.append(create('td', 'ducklab-row-number', String(start + rowIndex + 1)));
             for (const [columnIndex, column] of columns.entries()) {
                 const td = create('td', wrappedColumns.has(column.name) ? 'ducklab-wrap' : '', formatCellValue(row[column.name], columnFormats.get(column.name)));
                 td.dataset.row = String(rowIndex);
@@ -747,7 +756,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
                 if (rowIndex === 0) cell.style.zIndex = '5';
             }
         };
-        applyAt(frozenIndex, 0);
+        applyAt(frozenIndex + 1, frozenColumn.side === 'left' ? ROW_NUMBER_WIDTH : 0);
     }
     draw();
     if (data.queryId && state.explore) void refresh();
