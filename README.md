@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://ducklake.io/ducklab" rel="noopener">
+  <a href="https://cn00.github.io/ducklab/vs-extension" rel="noopener">
  <img width=200px src="./vs-extension/assets/logo_dark.png" alt="Project logo"></a>
 </p>
 
