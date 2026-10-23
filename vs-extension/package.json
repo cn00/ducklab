@@ -2,7 +2,7 @@
   "name": "ducklab",
   "displayName": "Ducklab",
   "description": "Interactive SQL/Python Notebooks. Powered by DuckDB",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "license": "Apache-2.0",
   "publisher": "ducklake",
   "icon": "./assets/logo_dark.png",
@@ -21,6 +21,7 @@
   },
   "keywords": [
     "notebookKernelIsql",
+    "notebookRenderer",
     "sql",
     "notebooks",
     "duckdb",
@@ -51,6 +52,15 @@
             "filenamePattern": "*.isql"
           }
         ]
+      }
+    ],
+    "notebookRenderer": [
+      {
+        "id": "ducklab.tableRenderer",
+        "displayName": "Ducklab Interactive Table",
+        "mimeTypes": ["application/vnd.ducklab.table+json"],
+        "entrypoint": "./out/renderer.js",
+        "requiresMessaging": "never"
       }
     ],
     "commands": [
