@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://ducklake.io/ducklab" rel="noopener">
+  <a href="https://cn00.github.io/ducklab/" rel="noopener">
  <img width=200px src="./assets/logo_dark.png" alt="Project logo"></a>
 </p>
 
@@ -8,9 +8,9 @@
 <div align="center">
 
 [![Status](https://img.shields.io/badge/status-active-success.svg)]()
-[![License](https://img.shields.io/badge/dynamic/json?label=version&query=version&url=https://raw.githubusercontent.com/ducklake-hq/ducklab/main/vs-extension/package.json)](https://ducklake.io)
-[![GitHub Issues](https://img.shields.io/github/issues/ducklake-hq/ducklab.svg)](https://github.com/ducklake-hq/ducklab/issues)
-[![License](https://img.shields.io/badge/dynamic/json?label=license&query=license&url=https://raw.githubusercontent.com/ducklake-hq/ducklab/main/vs-extension/package.json)](/LICENSE)
+[![License](https://img.shields.io/badge/dynamic/json?label=version&query=version&url=https://raw.githubusercontent.com/cn00/ducklab/main/vs-extension/package.json)](https://ducklake.io)
+[![GitHub Issues](https://img.shields.io/github/issues/cn00/ducklab.svg)](https://github.com/cn00/ducklab/issues)
+[![License](https://img.shields.io/badge/dynamic/json?label=license&query=license&url=https://raw.githubusercontent.com/cn00/ducklab/main/vs-extension/package.json)](/LICENSE)
 
 </div>
 
@@ -70,6 +70,10 @@ ATTACH 'host=$PGHOST dbname=$PGDATABASE user=$PGUSER password=$PGPASSWORD' AS du
 ```
 
 Keep credentials in `.env`, which is ignored by Git. Variable values are substituted as SQL text and must be valid in the surrounding SQL syntax.
+
+#### Large query results
+
+Single-query tabular results use backend pagination in the SQL Only, Python/SQL, and PySpark/SQL kernels. Only the visible page is sent to the interactive table; page navigation, global search, column filters, sorting, row counts, and Explore statistics are evaluated by the kernel. Value-filter suggestions are loaded on demand and capped at 200 per search. CSV export fetches the filtered result in pages. DDL and multi-statement cells keep their existing output behavior.
 
 <img src="./assets/sql_query.png">
 

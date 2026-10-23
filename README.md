@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://ducklake.io/ducklab" rel="noopener">
- <img width=200px src="https://raw.githubusercontent.com/ducklake-hq/ducklab/main/wasm/public/logo.png" alt="Project logo"></a>
+ <img width=200px src="./vs-extension/assets/logo_dark.png" alt="Project logo"></a>
 </p>
 
 <!-- <h3 align="center">ducklab</h3> -->
@@ -8,9 +8,9 @@
 <div align="center">
 
 [![Status](https://img.shields.io/badge/status-active-success.svg)]()
-[![License](https://img.shields.io/badge/dynamic/json?label=version&query=version&url=https://raw.githubusercontent.com/ducklake-hq/ducklab/main/core/package.json)](https://ducklake.io/ducklab)
-[![GitHub Issues](https://img.shields.io/github/issues/ducklake-hq/ducklab.svg)](https://github.com/ducklake-hq/ducklab/issues)
-[![License](https://img.shields.io/badge/dynamic/json?label=license&query=license&url=https://raw.githubusercontent.com/ducklake-hq/ducklab/main/core/package.json)](/LICENSE)
+[![License](https://img.shields.io/badge/dynamic/json?label=version&query=version&url=https://raw.githubusercontent.com/cn00/ducklab/main/core/package.json)](https://ducklake.io/ducklab)
+[![GitHub Issues](https://img.shields.io/github/issues/cn00/ducklab.svg)](https://github.com/cn00/ducklab/issues)
+[![License](https://img.shields.io/badge/dynamic/json?label=license&query=license&url=https://raw.githubusercontent.com/cn00/ducklab/main/core/package.json)](/LICENSE)
 
 </div>
 

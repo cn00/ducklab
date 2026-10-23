@@ -11,6 +11,8 @@ import { IControllerOpts } from '../IControllerOpts';
 import { getResourceId } from '../utils';
 import { expandNotebookSql } from '../notebookSqlEnvironment';
 import { errorMessage, redactSecrets } from '../sqlEnvironment';
+import { createPagedTableResult, TABLE_MIME_TYPE, TableQueryRegistry } from '../tableQuery';
+import { executePythonQuery } from '../kernelTableQuery';
 
 
 export class DucklabPythonController implements IDisposable {
@@ -29,10 +31,12 @@ export class DucklabPythonController implements IDisposable {
     private readonly _controller: vscode.NotebookController;
     private _executionOrder = 0;
     private kSelector = new KernelSelector();
+    private readonly tableQueries: TableQueryRegistry;
 
-    constructor(opts: IControllerOpts) {
+    constructor(opts: IControllerOpts, tableQueries: TableQueryRegistry) {
 
         this.opts = opts;
+        this.tableQueries = tableQueries;
 
         try {
             this._controller = vscode.notebooks.createNotebookController(this.id,
@@ -133,6 +137,7 @@ export class DucklabPythonController implements IDisposable {
     }
 
     private async _doExecution(cell: vscode.NotebookCell, kernel: IRunningKernel, notebookUri: vscode.Uri): Promise<void> {
+        this.tableQueries.removeCell(notebookUri, cell.document.uri.toString());
         let failed = false;
         let secrets: string[] = [];
         let currExecution = this._controller.createNotebookCellExecution(cell);
@@ -160,6 +165,16 @@ export class DucklabPythonController implements IDisposable {
                 const expanded = await expandNotebookSql(cellText, notebookUri);
                 secrets = expanded.secrets;
                 console.debug("[Ducklab] Running SQL cell");
+                const tableData = await createPagedTableResult(expanded.query,
+                    sql => executePythonQuery(kernel, sql), this.tableQueries, notebookUri, cell.document.uri.toString(),
+                    message => redactSecrets(message, secrets));
+                if (tableData) {
+                    await currExecution.replaceOutput([new vscode.NotebookCellOutput([
+                        vscode.NotebookCellOutputItem.text(JSON.stringify(tableData), TABLE_MIME_TYPE)
+                    ])]);
+                    currExecution.end(true, Date.now());
+                    return;
+                }
                 resEmitter = await kernel.execute(`db.query(${JSON.stringify(expanded.query)})`);
             }
             resEmitter.on(async (event) => {

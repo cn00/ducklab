@@ -1,15 +1,24 @@
 import type { ActivationFunction, OutputItem, RendererContext } from 'vscode-notebook-renderer';
 
 type Column = { name: string; type?: string; nativeType?: string };
-type TableData = { columns: Column[]; values: Record<string, unknown>[] };
+type TableStats = { nonNull: number; min?: number; max?: number; bins?: number[] };
+type TableData = { queryId?: string; columns: Column[]; values: Record<string, unknown>[]; totalRows?: number; page?: number; pageSize?: number; stats?: Record<string, TableStats> };
+type TableRequest = { kind: 'ducklab.table.request'; requestId: string; queryId: string; operation: 'page' | 'distinct'; page?: number; pageSize?: number; filters?: { search: string; text: Record<string, string>; values: Record<string, string[]> }; sortColumn?: string; sortAscending?: boolean; column?: string; valueSearch?: string; includeStats?: boolean };
+type TableResponse = { kind: 'ducklab.table.response'; requestId: string; queryId: string; ok: boolean; data?: Partial<TableData> & { distinctValues?: string[]; hasMoreDistinct?: boolean }; error?: string };
+const ROW_NUMBER_WIDTH = 54;
 
 const styles = `
 .ducklab-table { color: var(--vscode-foreground); font: 12px var(--vscode-font-family); border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow: visible; }
-.ducklab-toolbar { display:flex; gap:8px; align-items:center; padding:8px; border-bottom:1px solid var(--vscode-panel-border); flex-wrap:wrap; }
-.ducklab-toolbar input[type=search] { flex:1; min-width:180px; padding:6px 8px; color:var(--vscode-input-foreground); background:var(--vscode-input-background); border:1px solid var(--vscode-input-border); border-radius:4px; }
+.ducklab-toolbar { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; align-items:center; padding:8px 8px 8px ${ROW_NUMBER_WIDTH + 1}px; border-bottom:1px solid var(--vscode-panel-border); }
+.ducklab-toolbar-search { min-width:0; }
+.ducklab-toolbar input[type=search] { box-sizing:border-box; width:100%; min-width:0; padding:6px 8px; color:var(--vscode-input-foreground); background:var(--vscode-input-background); border:1px solid var(--vscode-input-border); border-radius:4px; }
 .ducklab-toolbar button,.ducklab-toolbar select { padding:5px 8px; color:var(--vscode-button-foreground); background:var(--vscode-button-background); border:0; border-radius:4px; cursor:pointer; }
 .ducklab-menu { position:relative; } .ducklab-menu[open] { z-index:1; }
 .ducklab-menu summary { cursor:pointer; padding:5px 8px; } .ducklab-menu-content { position:absolute; right:0; max-height:260px; overflow:auto; min-width:220px; padding:8px; background:var(--vscode-menu-background); border:1px solid var(--vscode-menu-border); box-shadow:0 4px 14px #0005; }
+.ducklab-column-picker[open] { z-index:10002; }
+.ducklab-column-picker > summary { display:flex; width:100%; height:100%; box-sizing:border-box; align-items:center; justify-content:flex-end; padding:0; list-style:none; }
+.ducklab-column-picker > summary::-webkit-details-marker { display:none; }
+.ducklab-column-picker .ducklab-menu-content { position:fixed; z-index:10002; right:auto; }
 .ducklab-menu-content label { display:flex; gap:6px; padding:4px; white-space:nowrap; }
 .ducklab-column-name,.ducklab-column-type { display:block; }
 .ducklab-column-type,.ducklab-column-count { display:block; opacity:.75; margin-top:4px; font-weight:normal; }
@@ -36,10 +45,27 @@ const styles = `
 .ducklab-grid th.ducklab-menu-open { z-index:10001; }
 .ducklab-grid .ducklab-frozen { position:sticky; z-index:2; background:var(--vscode-editor-background); }
 .ducklab-grid th.ducklab-frozen { z-index:5; }
+.ducklab-grid .ducklab-row-number { box-sizing:border-box; width:${ROW_NUMBER_WIDTH}px; min-width:${ROW_NUMBER_WIDTH}px; max-width:${ROW_NUMBER_WIDTH}px; text-align:right; color:var(--vscode-descriptionForeground); background:var(--vscode-editor-background); }
+.ducklab-grid th.ducklab-row-number { position:sticky; left:0; z-index:6; }
+.ducklab-grid th.ducklab-row-number .ducklab-explore-toggle { position:absolute; top:4px; left:0; z-index:7; }
+.ducklab-grid td.ducklab-row-number { position:sticky; left:0; z-index:3; border-right:1px solid var(--vscode-panel-border); }
 .ducklab-grid .ducklab-wrap { white-space:normal; max-width:240px; overflow-wrap:anywhere; }
 .ducklab-grid tbody tr:hover { background:var(--vscode-list-hoverBackground); }
+.ducklab-grid tbody tr:hover .ducklab-row-number { background:var(--vscode-list-hoverBackground); }
 .ducklab-grid td.ducklab-selected { background:var(--vscode-editor-selectionBackground, var(--vscode-list-activeSelectionBackground)); color:var(--vscode-editor-selectionForeground, var(--vscode-foreground)); }
-.ducklab-footer { display:flex; gap:8px; align-items:center; padding:8px; opacity:.8; } .ducklab-footer .spacer { flex:1; }
+.ducklab-explore-toggle { justify-self:start; width:20px; height:24px; padding:0!important; border:0; outline:none; box-shadow:none; appearance:none; color:#000!important; background:transparent!important; }
+.ducklab-explore-toggle:focus-visible { outline:2px solid var(--vscode-focusBorder); outline-offset:1px; }
+.ducklab-explore-toggle::before { display:block; width:0; height:0; margin:auto; content:''; }
+.ducklab-explore-toggle[aria-expanded="false"]::before { border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:6px solid #000; }
+.ducklab-explore-toggle[aria-expanded="true"]::before { border-right:4px solid transparent; border-left:4px solid transparent; border-top:6px solid #000; }
+.ducklab-footer { display:flex; gap:8px; align-items:center; padding:8px; color:var(--vscode-descriptionForeground); } .ducklab-footer .spacer { flex:1; }
+.ducklab-footer-actions { position:relative; }
+.ducklab-footer-actions > summary { list-style:none; cursor:pointer; padding:2px 6px; border-radius:3px; font-size:18px; line-height:1; }
+.ducklab-footer-actions > summary::-webkit-details-marker { display:none; }
+.ducklab-footer-actions > summary:hover { background:var(--vscode-list-hoverBackground); }
+.ducklab-footer-actions-panel { position:fixed; z-index:10003; min-width:140px; padding:4px; background:var(--vscode-editorWidget-background, var(--vscode-editor-background)); color:var(--vscode-editorWidget-foreground, var(--vscode-foreground)); border:1px solid var(--vscode-menu-border); border-radius:4px; box-shadow:0 4px 14px #0005; }
+.ducklab-footer-actions-panel button { display:block; width:100%; box-sizing:border-box; padding:6px 8px; border:0; background:transparent; color:inherit; text-align:left; white-space:nowrap; cursor:pointer; }
+.ducklab-footer-actions-panel button:hover { background:var(--vscode-list-hoverBackground); }
 `;
 
 function formatValue(value: unknown): string {
@@ -116,19 +142,32 @@ function makeHistogram(bins: number[], columnName: string, min: number, max: num
     return histogram;
 }
 
-function appendColumnExplore(header: HTMLTableCellElement, column: Column, rows: Record<string, unknown>[]): void {
+function appendColumnExplore(header: HTMLTableCellElement, column: Column, rows: Record<string, unknown>[], stats?: TableStats, statsPending = false): void {
     const nativeType = column.nativeType ?? '';
     const isNumeric = column.type === 'number' || /(?:TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT|FLOAT|DOUBLE|DECIMAL)/i.test(nativeType);
     const isTemporal = /(?:DATE|TIME|TIMESTAMP)/i.test(nativeType) || /^(?:date|datetime|datetime_tz)$/i.test(column.type ?? '');
-    const numbers = isNumeric
+    const numbers = isNumeric && !stats
         ? rows.map(row => row[column.name]).filter(value => value !== null && value !== undefined && value !== '').map(Number).filter(Number.isFinite)
         : [];
-    const temporalValues = isTemporal
+    const temporalValues = isTemporal && !stats
         ? rows.map(row => temporalValue(row[column.name], nativeType)).filter((value): value is number => value !== null)
         : [];
 
     header.append(create('span', 'ducklab-column-type', formatDataType(column)));
-    if (numbers.length) {
+    if (statsPending) {
+        header.append(create('span', 'ducklab-column-count', 'Calculating…'));
+    } else if (stats && stats.nonNull === 0) {
+        header.append(create('span', 'ducklab-column-count', '0 non-null'));
+    } else if (stats?.bins && stats.min !== undefined && stats.max !== undefined && (isNumeric || isTemporal)) {
+        header.append(makeHistogram(stats.bins, column.name, stats.min, stats.max,
+            isTemporal ? value => formatTemporalBoundary(value, nativeType) : formatNumericBoundary));
+        const range = create('div', 'ducklab-hist-range');
+        const formatBoundary = isTemporal ? (value: number) => formatTemporalBoundary(value, nativeType) : formatNumericBoundary;
+        range.append(create('span', '', formatBoundary(stats.min)), create('span', '', formatBoundary(stats.max)));
+        header.append(range);
+    } else if (stats) {
+        header.append(create('span', 'ducklab-column-count', `${stats.nonNull.toLocaleString()} non-null`));
+    } else if (numbers.length) {
         let min = Number.POSITIVE_INFINITY;
         let max = Number.NEGATIVE_INFINITY;
         for (const value of numbers) {
@@ -206,9 +245,14 @@ function create<K extends keyof HTMLElementTagNameMap>(tag: K, className?: strin
     return element;
 }
 
-function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): void {
+function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, context: RendererContext<unknown>, onMessage: (listener: (message: TableResponse) => void) => () => void): void {
     const visible = new Set(data.columns.map(column => column.name));
     const state = { query: '', page: 0, pageSize: 10, sortColumn: '', sortAscending: true, explore: true };
+    let totalRows = data.totalRows ?? data.values.length;
+    let currentStats = data.stats;
+    let requestNumber = 0;
+    let loadError = '';
+    let searchTimer: ReturnType<typeof setTimeout> | undefined;
     const columnTextFilters = new Map<string, string>();
     const columnValueFilters = new Map<string, Set<string>>();
     const columnFormats = new Map<string, string>();
@@ -227,14 +271,34 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
     style.textContent = styles;
     const shell = create('section', 'ducklab-table');
     const toolbar = create('div', 'ducklab-toolbar');
-    const columnsMenu = create('details', 'ducklab-menu');
-    const summary = create('summary', '', 'Columns');
+    const footerActions = create('details', 'ducklab-footer-actions');
+    const footerActionsSummary = create('summary', '', '⋯');
+    footerActionsSummary.setAttribute('aria-label', 'More table actions');
+    const footerActionsPanel = create('div', 'ducklab-footer-actions-panel');
+    footerActions.append(footerActionsSummary, footerActionsPanel);
+    const columnsMenu = create('details', 'ducklab-menu ducklab-column-picker');
+    const summary = create('summary', '', '#');
+    summary.setAttribute('aria-label', 'Choose visible columns');
     const menu = create('div', 'ducklab-menu-content');
     columnsMenu.append(summary, menu);
     columnsMenu.addEventListener('toggle', () => {
         if (!columnsMenu.open) return;
         root.querySelectorAll<HTMLDetailsElement>('.ducklab-column-actions[open]').forEach(actions => { actions.open = false; });
+        requestAnimationFrame(positionColumnsMenu);
     }, { signal });
+    function positionColumnsMenu(): void {
+        const rect = summary.getBoundingClientRect();
+        const menuWidth = menu.offsetWidth || 220;
+        const menuHeight = menu.offsetHeight || 260;
+        const top = rect.bottom + menuHeight <= window.innerHeight - 8
+            ? rect.bottom
+            : Math.max(8, rect.top - menuHeight);
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8));
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
+    }
+    window.addEventListener('scroll', () => { if (columnsMenu.open) positionColumnsMenu(); }, { capture: true, passive: true, signal });
+    window.addEventListener('resize', () => { if (columnsMenu.open) positionColumnsMenu(); }, { signal });
     for (const column of data.columns) {
         const label = create('label');
         const checkbox = create('input');
@@ -252,18 +316,29 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
     document.addEventListener('click', event => {
         const target = event.target as Node;
         if (!columnsMenu.contains(target)) columnsMenu.open = false;
+        if (!footerActions.contains(target)) footerActions.open = false;
         root.querySelectorAll<HTMLDetailsElement>('.ducklab-column-actions[open]').forEach(actions => {
             if (!actions.contains(target)) actions.open = false;
         });
     }, { signal });
-    const explore = create('button', '', 'Explore');
+    const explore = create('button', 'ducklab-explore-toggle');
     explore.type = 'button';
-    explore.addEventListener('click', () => { state.explore = !state.explore; draw(); }, { signal });
+    explore.setAttribute('aria-expanded', String(state.explore));
+    explore.setAttribute('aria-label', state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics');
+    explore.title = state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics';
+    explore.addEventListener('click', () => {
+        state.explore = !state.explore;
+        explore.setAttribute('aria-expanded', String(state.explore));
+        explore.setAttribute('aria-label', state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics');
+        explore.title = state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics';
+        if (data.queryId) void refresh(); else draw();
+    }, { signal });
     const exportButton = create('button', '', 'Export CSV');
     exportButton.type = 'button';
-    const toolbarSpacer = create('span');
-    toolbarSpacer.style.flex = '1';
-    toolbar.append(search, toolbarSpacer, columnsMenu, explore, exportButton);
+    footerActionsPanel.append(exportButton);
+    const toolbarSearch = create('div', 'ducklab-toolbar-search');
+    toolbarSearch.append(search);
+    toolbar.append(toolbarSearch);
     const scroll = create('div', 'ducklab-scroll');
     const grid = create('table', 'ducklab-grid');
     grid.tabIndex = 0;
@@ -281,7 +356,22 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         pageSize.append(option);
     }
     const footerSpacer = create('span', 'spacer');
-    footer.append(status, footerSpacer, pageSize, previous, next);
+    footer.append(status, footerSpacer, pageSize, previous, next, footerActions);
+    footerActions.addEventListener('click', event => event.stopPropagation(), { signal });
+    footerActions.addEventListener('toggle', () => {
+        if (!footerActions.open) return;
+        columnsMenu.open = false;
+        root.querySelectorAll<HTMLDetailsElement>('.ducklab-column-actions[open]').forEach(actions => { actions.open = false; });
+        requestAnimationFrame(() => {
+            const rect = footerActionsSummary.getBoundingClientRect();
+            const panelWidth = footerActionsPanel.offsetWidth || 140;
+            const panelHeight = footerActionsPanel.offsetHeight || 40;
+            const top = rect.top >= panelHeight + 8 ? rect.top - panelHeight - 4 : Math.min(window.innerHeight - panelHeight - 8, rect.bottom + 4);
+            const left = Math.max(8, Math.min(rect.right - panelWidth, window.innerWidth - panelWidth - 8));
+            footerActionsPanel.style.top = `${top}px`;
+            footerActionsPanel.style.left = `${left}px`;
+        });
+    }, { signal });
     scroll.append(grid);
     shell.append(toolbar, scroll, footer);
     root.replaceChildren(style, shell);
@@ -308,37 +398,58 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
     document.addEventListener('pointerup', () => { draggingSelection = false; }, { signal });
     grid.addEventListener('copy', event => {
         if (!selection || !event.clipboardData) return;
-        const currentRows = filteredRows().slice(state.page * state.pageSize, (state.page + 1) * state.pageSize);
+        const currentRows = data.queryId ? filteredRows() : filteredRows().slice(state.page * state.pageSize, (state.page + 1) * state.pageSize);
         const currentColumns = data.columns.filter(column => visible.has(column.name));
         const firstRow = Math.min(selection.startRow, selection.endRow);
         const lastRow = Math.max(selection.startRow, selection.endRow);
         const firstColumn = Math.min(selection.startColumn, selection.endColumn);
         const lastColumn = Math.max(selection.startColumn, selection.endColumn);
         const selectedColumns = currentColumns.slice(firstColumn, lastColumn + 1);
-        const copied = [
-            selectedColumns.map(column => column.name.replace(/[\t\r\n]+/g, ' ')).join('\t'),
-            ...currentRows.slice(firstRow, lastRow + 1).map(row =>
+        const selectedValues = currentRows.slice(firstRow, lastRow + 1).map(row =>
             currentColumns.slice(firstColumn, lastColumn + 1)
                 .map(column => formatValue(row[column.name]).replace(/[\t\r\n]+/g, ' '))
                 .join('\t')
-            )
-        ].join('\r\n');
+        );
+        const isSingleCell = firstRow === lastRow && firstColumn === lastColumn;
+        const copied = (isSingleCell
+            ? selectedValues
+            : [selectedColumns.map(column => column.name.replace(/[\t\r\n]+/g, ' ')).join('\t'), ...selectedValues]
+        ).join('\r\n');
         event.clipboardData.setData('text/plain', copied);
         event.preventDefault();
     }, { signal });
 
-    search.addEventListener('input', () => { state.query = search.value.toLocaleLowerCase(); state.page = 0; draw(); }, { signal });
-    previous.addEventListener('click', () => { state.page = Math.max(0, state.page - 1); draw(); }, { signal });
-    next.addEventListener('click', () => { state.page++; draw(); }, { signal });
-    pageSize.addEventListener('change', () => { state.pageSize = Number(pageSize.value); state.page = 0; draw(); }, { signal });
+    search.addEventListener('input', () => {
+        state.query = search.value;
+        state.page = 0;
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => { void refresh(); }, data.queryId ? 250 : 0);
+    }, { signal });
+    previous.addEventListener('click', () => { state.page = Math.max(0, state.page - 1); void refresh(); }, { signal });
+    next.addEventListener('click', () => { state.page++; void refresh(); }, { signal });
+    pageSize.addEventListener('change', () => { state.pageSize = Number(pageSize.value); state.page = 0; void refresh(); }, { signal });
     exportButton.addEventListener('click', () => {
+        footerActions.open = false;
         const columns = data.columns.filter(column => visible.has(column.name));
-        const csv = [columns.map(column => JSON.stringify(column.name)).join(','), ...filteredRows().map(row => columns.map(column => JSON.stringify(formatValue(row[column.name]))).join(','))].join('\r\n');
-        const link = create('a');
-        link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-        link.download = 'ducklab-result.csv';
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(link.href), 0);
+        void (async () => {
+            const csvParts = [columns.map(column => JSON.stringify(column.name)).join(',') + '\r\n'];
+            if (data.queryId) {
+                const pageCount = Math.ceil(totalRows / 100);
+                for (let page = 0; page < pageCount; page++) {
+                    const response = await sendRequest({ operation: 'page', page, pageSize: 100, filters: filtersForRequest(),
+                        sortColumn: state.sortColumn || undefined, sortAscending: state.sortAscending, includeStats: false });
+                    if (!response?.ok || !response.data) { loadError = response?.error ?? 'CSV export failed.'; draw(); return; }
+                    csvParts.push(...(response.data.values ?? []).map(row => columns.map(column => JSON.stringify(formatValue(row[column.name]))).join(',') + '\r\n'));
+                }
+            } else {
+                csvParts.push(...filteredRows().map(row => columns.map(column => JSON.stringify(formatValue(row[column.name]))).join(',') + '\r\n'));
+            }
+            const link = create('a');
+            link.href = URL.createObjectURL(new Blob(csvParts, { type: 'text/csv;charset=utf-8' }));
+            link.download = 'ducklab-result.csv';
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(link.href), 0);
+        })();
     }, { signal });
 
     function createColumnActions(column: Column): HTMLDetailsElement {
@@ -387,8 +498,8 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
             return element;
         };
 
-        addAction('Asc', () => { state.sortColumn = column.name; state.sortAscending = true; state.page = 0; draw(); });
-        addAction('Desc', () => { state.sortColumn = column.name; state.sortAscending = false; state.page = 0; draw(); });
+        addAction('Asc', () => { state.sortColumn = column.name; state.sortAscending = true; state.page = 0; void refresh(); });
+        addAction('Desc', () => { state.sortColumn = column.name; state.sortAscending = false; state.page = 0; void refresh(); });
         addAction('Copy column name', () => { void copyText(column.name); });
         const freezeSeparator = separator();
         addAction(frozenColumn?.name === column.name && frozenColumn.side === 'left' ? 'Unfreeze left' : 'Freeze left', () => {
@@ -451,7 +562,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
             if (query) columnTextFilters.set(column.name, query);
             else columnTextFilters.delete(column.name);
             state.page = 0;
-            draw();
+            void refresh();
         }, { signal });
         filterPanel.append(filterInput, applyFilter);
         filterMenu.append(filterPanel);
@@ -475,7 +586,10 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         valuesMenu.append(valuesPanel);
         let allValues: string[] = [];
         let pendingValues = new Set<string>();
+        let hasMoreValues = false;
+        let valueSearchVersion = 0;
         const renderValues = () => {
+            selectAll.textContent = hasMoreValues ? 'Select all shown' : 'Select all';
             const matching = allValues.filter(value => value.toLocaleLowerCase().includes(valueSearch.value.toLocaleLowerCase()));
             valuesList.replaceChildren();
             for (const value of matching.slice(0, 200)) {
@@ -491,18 +605,37 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
                 label.append(checkbox, document.createTextNode(value));
                 valuesList.append(label);
             }
-            valueStatus.textContent = `${pendingValues.size} of ${allValues.length} values selected${matching.length > 200 ? ` · showing 200 of ${matching.length}` : ''}`;
+            valueStatus.textContent = `${pendingValues.size} selected from ${allValues.length} values${hasMoreValues ? ' · more values exist; search to narrow' : ''}${matching.length > 200 ? ` · showing 200 of ${matching.length}` : ''}`;
         };
         valuesMenu.addEventListener('toggle', () => {
             if (!valuesMenu.open) return;
-            if (!distinctValueCache.has(column.name)) {
+            if (data.queryId) {
+                const version = ++valueSearchVersion;
+                void sendRequest({ operation: 'distinct', column: column.name, valueSearch: valueSearch.value, filters: filtersForRequest() }).then(response => {
+                    if (version !== valueSearchVersion) return;
+                    if (response?.ok && response.data?.distinctValues) {
+                        allValues = response.data.distinctValues;
+                        hasMoreValues = response.data.hasMoreDistinct ?? false;
+                        pendingValues = new Set(columnValueFilters.get(column.name) ?? (hasMoreValues ? [] : allValues));
+                        renderValues();
+                    } else if (response?.error) valueStatus.textContent = response.error;
+                });
+            } else if (!distinctValueCache.has(column.name)) {
                 distinctValueCache.set(column.name, [...new Set(data.values.map(row => formatValue(row[column.name])))].sort((a, b) => a.localeCompare(b)));
+                allValues = distinctValueCache.get(column.name) ?? [];
+                hasMoreValues = false;
             }
-            allValues = distinctValueCache.get(column.name) ?? [];
             pendingValues = new Set(columnValueFilters.get(column.name) ?? allValues);
             renderValues();
         }, { signal });
-        valueSearch.addEventListener('input', renderValues, { signal });
+        valueSearch.addEventListener('input', () => {
+            if (!data.queryId) { renderValues(); return; }
+            const version = ++valueSearchVersion;
+            void sendRequest({ operation: 'distinct', column: column.name, valueSearch: valueSearch.value, filters: filtersForRequest() }).then(response => {
+                if (version !== valueSearchVersion) return;
+                if (response?.ok && response.data?.distinctValues) { allValues = response.data.distinctValues; hasMoreValues = response.data.hasMoreDistinct ?? false; renderValues(); }
+            });
+        }, { signal });
         selectAll.addEventListener('click', event => {
             event.stopPropagation();
             pendingValues = new Set(allValues);
@@ -517,10 +650,10 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         applyValues.type = 'button';
         applyValues.addEventListener('click', event => {
             event.stopPropagation();
-            if (pendingValues.size === allValues.length) columnValueFilters.delete(column.name);
+            if (pendingValues.size === allValues.length && !hasMoreValues) columnValueFilters.delete(column.name);
             else columnValueFilters.set(column.name, new Set(pendingValues));
             state.page = 0;
-            draw();
+            void refresh();
         }, { signal });
         valueActions.append(applyValues);
         filterBlock.append(valuesMenu);
@@ -529,7 +662,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
             columnTextFilters.delete(column.name);
             columnValueFilters.delete(column.name);
             state.page = 0;
-            draw();
+            void refresh();
         });
         filterBlock.append(clearFilters);
         panel.insertBefore(filterBlock, freezeSeparator);
@@ -537,9 +670,60 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         return actions;
     }
 
+    function filtersForRequest() {
+        return {
+            search: state.query,
+            text: Object.fromEntries(columnTextFilters),
+            values: Object.fromEntries([...columnValueFilters].map(([name, values]) => [name, [...values]]))
+        };
+    }
+
+    const pending = new Map<string, (response: TableResponse) => void>();
+    const removeMessageListener = onMessage(response => {
+        const resolve = pending.get(response.requestId);
+        if (!resolve) return;
+        pending.delete(response.requestId);
+        resolve(response);
+    });
+    signal.addEventListener('abort', () => {
+        removeMessageListener();
+        pending.clear();
+    }, { once: true });
+
+    function sendRequest(request: Omit<TableRequest, 'kind' | 'requestId' | 'queryId'>): Promise<TableResponse | null> {
+        if (!data.queryId || !context.postMessage) return Promise.resolve(null);
+        const requestId = `${Date.now()}-${++requestNumber}`;
+        return new Promise(resolve => {
+            const timer = setTimeout(() => { pending.delete(requestId); resolve(null); }, 30000);
+            pending.set(requestId, response => { clearTimeout(timer); resolve(response); });
+            context.postMessage!({ kind: 'ducklab.table.request', requestId, queryId: data.queryId, ...request } satisfies TableRequest);
+        });
+    }
+
+    let refreshVersion = 0;
+    async function refresh(): Promise<void> {
+        if (!data.queryId) { draw(); return; }
+        const version = ++refreshVersion;
+        const response = await sendRequest({ operation: 'page', page: state.page, pageSize: state.pageSize,
+            filters: filtersForRequest(), sortColumn: state.sortColumn || undefined, sortAscending: state.sortAscending, includeStats: state.explore });
+        if (version !== refreshVersion) return;
+        if (!response?.ok || !response.data) {
+            loadError = response?.error ?? 'Could not load this page.';
+            draw();
+            return;
+        }
+        loadError = '';
+        data.values = response.data.values ?? [];
+        totalRows = response.data.totalRows ?? 0;
+        currentStats = response.data.stats;
+        state.page = response.data.page ?? state.page;
+        draw();
+    }
+
     function filteredRows(): Record<string, unknown>[] {
+        if (data.queryId) return data.values;
         let rows = data.values.filter(row => {
-            if (state.query && !data.columns.some(column => formatValue(row[column.name]).toLocaleLowerCase().includes(state.query))) return false;
+            if (state.query && !data.columns.some(column => formatValue(row[column.name]).toLocaleLowerCase().includes(state.query.toLocaleLowerCase()))) return false;
             for (const [columnName, query] of columnTextFilters) {
                 if (!formatValue(row[columnName]).toLocaleLowerCase().includes(query.toLocaleLowerCase())) return false;
             }
@@ -577,12 +761,16 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
     function draw(): void {
         selection = null;
         const rows = filteredRows();
-        const pages = Math.max(1, Math.ceil(rows.length / state.pageSize));
+        const pages = Math.max(1, Math.ceil((data.queryId ? totalRows : rows.length) / state.pageSize));
         state.page = Math.min(state.page, pages - 1);
         const columns = data.columns.filter(column => visible.has(column.name));
         grid.replaceChildren();
         const head = create('thead');
         const headRow = create('tr');
+        const rowNumberHeader = create('th', 'ducklab-row-number', '#');
+        rowNumberHeader.setAttribute('aria-label', 'Row number');
+        rowNumberHeader.replaceChildren(explore, columnsMenu);
+        headRow.append(rowNumberHeader);
         for (const column of columns) {
             const th = create('th');
             if (wrappedColumns.has(column.name)) th.classList.add('ducklab-wrap');
@@ -593,18 +781,19 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
                 if (state.sortColumn === column.name) state.sortAscending = !state.sortAscending;
                 else { state.sortColumn = column.name; state.sortAscending = true; }
                 state.page = 0;
-                draw();
+                void refresh();
             }, { signal });
             th.append(columnName);
-            if (state.explore) appendColumnExplore(th, column, rows);
+            if (state.explore) appendColumnExplore(th, column, rows, currentStats?.[column.name], Boolean(data.queryId && !currentStats));
             th.append(createColumnActions(column));
             headRow.append(th);
         }
         head.append(headRow);
         const body = create('tbody');
         const start = state.page * state.pageSize;
-        for (const [rowIndex, row] of rows.slice(start, start + state.pageSize).entries()) {
+        for (const [rowIndex, row] of (data.queryId ? rows : rows.slice(start, start + state.pageSize)).entries()) {
             const tr = create('tr');
+            tr.append(create('td', 'ducklab-row-number', String(start + rowIndex + 1)));
             for (const [columnIndex, column] of columns.entries()) {
                 const td = create('td', wrappedColumns.has(column.name) ? 'ducklab-wrap' : '', formatCellValue(row[column.name], columnFormats.get(column.name)));
                 td.dataset.row = String(rowIndex);
@@ -615,7 +804,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
         }
         grid.append(head, body);
         applyFreeze(columns);
-        status.textContent = `${rows.length.toLocaleString()} rows, ${columns.length} visible of ${data.columns.length} columns · Page ${state.page + 1} of ${pages}`;
+        status.textContent = `${loadError || `${(data.queryId ? totalRows : rows.length).toLocaleString()} rows, ${columns.length} visible of ${data.columns.length} columns`} · Page ${state.page + 1} of ${pages}`;
         previous.disabled = state.page === 0;
         next.disabled = state.page >= pages - 1;
     }
@@ -635,19 +824,33 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal): v
                 if (rowIndex === 0) cell.style.zIndex = '5';
             }
         };
-        applyAt(frozenIndex, 0);
+        applyAt(frozenIndex + 1, frozenColumn.side === 'left' ? ROW_NUMBER_WIDTH : 0);
     }
     draw();
+    if (data.queryId && state.explore) void refresh();
 }
 
-export const activate: ActivationFunction<unknown> = (_context: RendererContext<unknown>) => ({
-    renderOutputItem(outputItem: OutputItem, element: HTMLElement, signal: AbortSignal) {
-        try {
-            const data = outputItem.json() as TableData;
-            if (!Array.isArray(data.columns) || !Array.isArray(data.values)) throw new Error('Invalid table output payload');
-            renderTable(data, element, signal);
-        } catch (error) {
-            element.textContent = `Ducklab table renderer error: ${error instanceof Error ? error.message : String(error)}`;
+export const activate: ActivationFunction<unknown> = (context: RendererContext<unknown>) => {
+    const listeners: Array<(message: TableResponse) => void> = [];
+    context.onDidReceiveMessage?.(message => {
+        const response = message as TableResponse;
+        if (response?.kind === 'ducklab.table.response') listeners.forEach(listener => listener(response));
+    });
+    return {
+        renderOutputItem(outputItem: OutputItem, element: HTMLElement, signal: AbortSignal) {
+            try {
+                const data = outputItem.json() as TableData;
+                if (!Array.isArray(data.columns) || !Array.isArray(data.values)) throw new Error('Invalid table output payload');
+                renderTable(data, element, signal, context, listener => {
+                    listeners.push(listener);
+                    return () => {
+                        const index = listeners.indexOf(listener);
+                        if (index >= 0) listeners.splice(index, 1);
+                    };
+                });
+            } catch (error) {
+                element.textContent = `Ducklab table renderer error: ${error instanceof Error ? error.message : String(error)}`;
+            }
         }
-    }
-});
+    };
+};

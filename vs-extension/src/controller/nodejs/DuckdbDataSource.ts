@@ -72,16 +72,8 @@ export class DuckdbDataSource extends TabularDataSource {
       throw Error("Database could not be initialized");
     }
     const res = await this._db.run(query);
-    if (res.rowCount === 0) {
-      return {
-        columns: [],
-        values: []
-      };
-    }
-    else {
-      const transformed = await this.transformResultset(res);
-      return transformed;
-    }
+    // Keep schema metadata for empty and paged result sets too.
+    return await this.transformResultset(res);
 
   }
 

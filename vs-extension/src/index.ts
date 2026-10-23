@@ -7,11 +7,15 @@ import { DucklabSparkController } from './controller/python/DucklabSparkControll
 import os from "os";
 import fs from "fs";
 import { DucklabSQLController } from './controller/nodejs/DucklabSQLController';
+import { TableQueryRegistry } from './controller/tableQuery';
 
 process.env.node_pre_gyp_mock_s3 = undefined;
 
 
 export function activate(context: vscode.ExtensionContext) {
+
+    const tableQueries = new TableQueryRegistry();
+    context.subscriptions.push(tableQueries);
 
     // writeFile('context0.json');
     const base_path = vscode.workspace.workspaceFolders[0].uri.fsPath;
@@ -22,9 +26,9 @@ export function activate(context: vscode.ExtensionContext) {
         if (err) throw Error("Temp directory not accessible");
 
         try {
-            context.subscriptions.push(new DucklabPythonController({ tempPath: path, workingDir: base_path }));
-            context.subscriptions.push(new DucklabSparkController({ tempPath: path, workingDir: base_path }));
-            context.subscriptions.push(new DucklabSQLController({ tempPath: path, workingDir: base_path }));
+            context.subscriptions.push(new DucklabPythonController({ tempPath: path, workingDir: base_path }, tableQueries));
+            context.subscriptions.push(new DucklabSparkController({ tempPath: path, workingDir: base_path }, tableQueries));
+            context.subscriptions.push(new DucklabSQLController({ tempPath: path, workingDir: base_path }, tableQueries));
         }
         catch (ex) {
             console.log("Failed: ", ex);
