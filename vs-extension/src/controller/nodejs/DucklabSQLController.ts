@@ -58,12 +58,15 @@ export class DucklabSQLController {
         const nbId = getResourceId(notebook.uri);
 
         if (!(nbId in this.kernels)) {
+            const workingDir = notebook.uri.scheme === 'file'
+                ? path.dirname(notebook.uri.fsPath)
+                : this.opts.workingDir;
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: "Initializing Kernel...",
             }, async (progress) => {
                 this.kernels[nbId] = new DuckdbDataSource(nbId, {
-                    dataSearchPath: this.opts.workingDir,
+                    dataSearchPath: workingDir,
                     dbPath: path.join(this.opts.tempPath, "ducklab", nbId + ".db")
                 });
                 await this.kernels[nbId].connect();
