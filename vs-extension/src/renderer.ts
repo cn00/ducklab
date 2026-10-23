@@ -5,15 +5,20 @@ type TableStats = { nonNull: number; min?: number; max?: number; bins?: number[]
 type TableData = { queryId?: string; columns: Column[]; values: Record<string, unknown>[]; totalRows?: number; page?: number; pageSize?: number; stats?: Record<string, TableStats> };
 type TableRequest = { kind: 'ducklab.table.request'; requestId: string; queryId: string; operation: 'page' | 'distinct'; page?: number; pageSize?: number; filters?: { search: string; text: Record<string, string>; values: Record<string, string[]> }; sortColumn?: string; sortAscending?: boolean; column?: string; valueSearch?: string; includeStats?: boolean };
 type TableResponse = { kind: 'ducklab.table.response'; requestId: string; queryId: string; ok: boolean; data?: Partial<TableData> & { distinctValues?: string[]; hasMoreDistinct?: boolean }; error?: string };
-const ROW_NUMBER_WIDTH = 42;
+const ROW_NUMBER_WIDTH = 54;
 
 const styles = `
 .ducklab-table { color: var(--vscode-foreground); font: 12px var(--vscode-font-family); border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow: visible; }
-.ducklab-toolbar { display:flex; gap:8px; align-items:center; padding:8px; border-bottom:1px solid var(--vscode-panel-border); flex-wrap:wrap; }
-.ducklab-toolbar input[type=search] { flex:1; min-width:180px; padding:6px 8px; color:var(--vscode-input-foreground); background:var(--vscode-input-background); border:1px solid var(--vscode-input-border); border-radius:4px; }
+.ducklab-toolbar { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; align-items:center; padding:8px 8px 8px ${ROW_NUMBER_WIDTH + 1}px; border-bottom:1px solid var(--vscode-panel-border); }
+.ducklab-toolbar-search { min-width:0; }
+.ducklab-toolbar input[type=search] { box-sizing:border-box; width:100%; min-width:0; padding:6px 8px; color:var(--vscode-input-foreground); background:var(--vscode-input-background); border:1px solid var(--vscode-input-border); border-radius:4px; }
 .ducklab-toolbar button,.ducklab-toolbar select { padding:5px 8px; color:var(--vscode-button-foreground); background:var(--vscode-button-background); border:0; border-radius:4px; cursor:pointer; }
 .ducklab-menu { position:relative; } .ducklab-menu[open] { z-index:1; }
 .ducklab-menu summary { cursor:pointer; padding:5px 8px; } .ducklab-menu-content { position:absolute; right:0; max-height:260px; overflow:auto; min-width:220px; padding:8px; background:var(--vscode-menu-background); border:1px solid var(--vscode-menu-border); box-shadow:0 4px 14px #0005; }
+.ducklab-column-picker[open] { z-index:10002; }
+.ducklab-column-picker > summary { display:flex; width:100%; height:100%; box-sizing:border-box; align-items:center; justify-content:flex-end; padding:0; list-style:none; }
+.ducklab-column-picker > summary::-webkit-details-marker { display:none; }
+.ducklab-column-picker .ducklab-menu-content { position:fixed; z-index:10002; right:auto; }
 .ducklab-menu-content label { display:flex; gap:6px; padding:4px; white-space:nowrap; }
 .ducklab-column-name,.ducklab-column-type { display:block; }
 .ducklab-column-type,.ducklab-column-count { display:block; opacity:.75; margin-top:4px; font-weight:normal; }
@@ -42,12 +47,25 @@ const styles = `
 .ducklab-grid th.ducklab-frozen { z-index:5; }
 .ducklab-grid .ducklab-row-number { box-sizing:border-box; width:${ROW_NUMBER_WIDTH}px; min-width:${ROW_NUMBER_WIDTH}px; max-width:${ROW_NUMBER_WIDTH}px; text-align:right; color:var(--vscode-descriptionForeground); background:var(--vscode-editor-background); }
 .ducklab-grid th.ducklab-row-number { position:sticky; left:0; z-index:6; }
+.ducklab-grid th.ducklab-row-number .ducklab-explore-toggle { position:absolute; top:4px; left:0; z-index:7; }
 .ducklab-grid td.ducklab-row-number { position:sticky; left:0; z-index:3; border-right:1px solid var(--vscode-panel-border); }
 .ducklab-grid .ducklab-wrap { white-space:normal; max-width:240px; overflow-wrap:anywhere; }
 .ducklab-grid tbody tr:hover { background:var(--vscode-list-hoverBackground); }
 .ducklab-grid tbody tr:hover .ducklab-row-number { background:var(--vscode-list-hoverBackground); }
 .ducklab-grid td.ducklab-selected { background:var(--vscode-editor-selectionBackground, var(--vscode-list-activeSelectionBackground)); color:var(--vscode-editor-selectionForeground, var(--vscode-foreground)); }
+.ducklab-explore-toggle { justify-self:start; width:20px; height:24px; padding:0!important; border:0; outline:none; box-shadow:none; appearance:none; color:#000!important; background:transparent!important; }
+.ducklab-explore-toggle:focus-visible { outline:2px solid var(--vscode-focusBorder); outline-offset:1px; }
+.ducklab-explore-toggle::before { display:block; width:0; height:0; margin:auto; content:''; }
+.ducklab-explore-toggle[aria-expanded="false"]::before { border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:6px solid #000; }
+.ducklab-explore-toggle[aria-expanded="true"]::before { border-right:4px solid transparent; border-left:4px solid transparent; border-top:6px solid #000; }
 .ducklab-footer { display:flex; gap:8px; align-items:center; padding:8px; opacity:.8; } .ducklab-footer .spacer { flex:1; }
+.ducklab-footer-actions { position:relative; }
+.ducklab-footer-actions > summary { list-style:none; cursor:pointer; padding:2px 6px; border-radius:3px; font-size:18px; line-height:1; }
+.ducklab-footer-actions > summary::-webkit-details-marker { display:none; }
+.ducklab-footer-actions > summary:hover { background:var(--vscode-list-hoverBackground); }
+.ducklab-footer-actions-panel { position:fixed; z-index:10003; min-width:140px; padding:4px; background:var(--vscode-menu-background); color:var(--vscode-menu-foreground); border:1px solid var(--vscode-menu-border); border-radius:4px; box-shadow:0 4px 14px #0005; }
+.ducklab-footer-actions-panel button { display:block; width:100%; box-sizing:border-box; padding:6px 8px; border:0; background:transparent; color:inherit; text-align:left; white-space:nowrap; cursor:pointer; }
+.ducklab-footer-actions-panel button:hover { background:var(--vscode-list-hoverBackground); }
 `;
 
 function formatValue(value: unknown): string {
@@ -253,14 +271,34 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
     style.textContent = styles;
     const shell = create('section', 'ducklab-table');
     const toolbar = create('div', 'ducklab-toolbar');
-    const columnsMenu = create('details', 'ducklab-menu');
-    const summary = create('summary', '', 'Columns');
+    const footerActions = create('details', 'ducklab-footer-actions');
+    const footerActionsSummary = create('summary', '', '⋯');
+    footerActionsSummary.setAttribute('aria-label', 'More table actions');
+    const footerActionsPanel = create('div', 'ducklab-footer-actions-panel');
+    footerActions.append(footerActionsSummary, footerActionsPanel);
+    const columnsMenu = create('details', 'ducklab-menu ducklab-column-picker');
+    const summary = create('summary', '', '#');
+    summary.setAttribute('aria-label', 'Choose visible columns');
     const menu = create('div', 'ducklab-menu-content');
     columnsMenu.append(summary, menu);
     columnsMenu.addEventListener('toggle', () => {
         if (!columnsMenu.open) return;
         root.querySelectorAll<HTMLDetailsElement>('.ducklab-column-actions[open]').forEach(actions => { actions.open = false; });
+        requestAnimationFrame(positionColumnsMenu);
     }, { signal });
+    function positionColumnsMenu(): void {
+        const rect = summary.getBoundingClientRect();
+        const menuWidth = menu.offsetWidth || 220;
+        const menuHeight = menu.offsetHeight || 260;
+        const top = rect.bottom + menuHeight <= window.innerHeight - 8
+            ? rect.bottom
+            : Math.max(8, rect.top - menuHeight);
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8));
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
+    }
+    window.addEventListener('scroll', () => { if (columnsMenu.open) positionColumnsMenu(); }, { capture: true, passive: true, signal });
+    window.addEventListener('resize', () => { if (columnsMenu.open) positionColumnsMenu(); }, { signal });
     for (const column of data.columns) {
         const label = create('label');
         const checkbox = create('input');
@@ -278,18 +316,29 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
     document.addEventListener('click', event => {
         const target = event.target as Node;
         if (!columnsMenu.contains(target)) columnsMenu.open = false;
+        if (!footerActions.contains(target)) footerActions.open = false;
         root.querySelectorAll<HTMLDetailsElement>('.ducklab-column-actions[open]').forEach(actions => {
             if (!actions.contains(target)) actions.open = false;
         });
     }, { signal });
-    const explore = create('button', '', 'Explore');
+    const explore = create('button', 'ducklab-explore-toggle');
     explore.type = 'button';
-    explore.addEventListener('click', () => { state.explore = !state.explore; if (data.queryId) void refresh(); else draw(); }, { signal });
+    explore.setAttribute('aria-expanded', String(state.explore));
+    explore.setAttribute('aria-label', state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics');
+    explore.title = state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics';
+    explore.addEventListener('click', () => {
+        state.explore = !state.explore;
+        explore.setAttribute('aria-expanded', String(state.explore));
+        explore.setAttribute('aria-label', state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics');
+        explore.title = state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics';
+        if (data.queryId) void refresh(); else draw();
+    }, { signal });
     const exportButton = create('button', '', 'Export CSV');
     exportButton.type = 'button';
-    const toolbarSpacer = create('span');
-    toolbarSpacer.style.flex = '1';
-    toolbar.append(search, toolbarSpacer, columnsMenu, explore, exportButton);
+    footerActionsPanel.append(exportButton);
+    const toolbarSearch = create('div', 'ducklab-toolbar-search');
+    toolbarSearch.append(search);
+    toolbar.append(toolbarSearch);
     const scroll = create('div', 'ducklab-scroll');
     const grid = create('table', 'ducklab-grid');
     grid.tabIndex = 0;
@@ -307,7 +356,22 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         pageSize.append(option);
     }
     const footerSpacer = create('span', 'spacer');
-    footer.append(status, footerSpacer, pageSize, previous, next);
+    footer.append(status, footerActions, footerSpacer, pageSize, previous, next);
+    footerActions.addEventListener('click', event => event.stopPropagation(), { signal });
+    footerActions.addEventListener('toggle', () => {
+        if (!footerActions.open) return;
+        columnsMenu.open = false;
+        root.querySelectorAll<HTMLDetailsElement>('.ducklab-column-actions[open]').forEach(actions => { actions.open = false; });
+        requestAnimationFrame(() => {
+            const rect = footerActionsSummary.getBoundingClientRect();
+            const panelWidth = footerActionsPanel.offsetWidth || 140;
+            const panelHeight = footerActionsPanel.offsetHeight || 40;
+            const top = rect.top >= panelHeight + 8 ? rect.top - panelHeight - 4 : Math.min(window.innerHeight - panelHeight - 8, rect.bottom + 4);
+            const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
+            footerActionsPanel.style.top = `${top}px`;
+            footerActionsPanel.style.left = `${left}px`;
+        });
+    }, { signal });
     scroll.append(grid);
     shell.append(toolbar, scroll, footer);
     root.replaceChildren(style, shell);
@@ -341,14 +405,16 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         const firstColumn = Math.min(selection.startColumn, selection.endColumn);
         const lastColumn = Math.max(selection.startColumn, selection.endColumn);
         const selectedColumns = currentColumns.slice(firstColumn, lastColumn + 1);
-        const copied = [
-            selectedColumns.map(column => column.name.replace(/[\t\r\n]+/g, ' ')).join('\t'),
-            ...currentRows.slice(firstRow, lastRow + 1).map(row =>
+        const selectedValues = currentRows.slice(firstRow, lastRow + 1).map(row =>
             currentColumns.slice(firstColumn, lastColumn + 1)
                 .map(column => formatValue(row[column.name]).replace(/[\t\r\n]+/g, ' '))
                 .join('\t')
-            )
-        ].join('\r\n');
+        );
+        const isSingleCell = firstRow === lastRow && firstColumn === lastColumn;
+        const copied = (isSingleCell
+            ? selectedValues
+            : [selectedColumns.map(column => column.name.replace(/[\t\r\n]+/g, ' ')).join('\t'), ...selectedValues]
+        ).join('\r\n');
         event.clipboardData.setData('text/plain', copied);
         event.preventDefault();
     }, { signal });
@@ -363,6 +429,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
     next.addEventListener('click', () => { state.page++; void refresh(); }, { signal });
     pageSize.addEventListener('change', () => { state.pageSize = Number(pageSize.value); state.page = 0; void refresh(); }, { signal });
     exportButton.addEventListener('click', () => {
+        footerActions.open = false;
         const columns = data.columns.filter(column => visible.has(column.name));
         void (async () => {
             const csvParts = [columns.map(column => JSON.stringify(column.name)).join(',') + '\r\n'];
@@ -702,6 +769,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         const headRow = create('tr');
         const rowNumberHeader = create('th', 'ducklab-row-number', '#');
         rowNumberHeader.setAttribute('aria-label', 'Row number');
+        rowNumberHeader.replaceChildren(explore, columnsMenu);
         headRow.append(rowNumberHeader);
         for (const column of columns) {
             const th = create('th');
