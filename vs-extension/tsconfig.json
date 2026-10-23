@@ -5,6 +5,7 @@
     "module": "ESNext",
     "lib": [
       "ES2021.String",
+      "DOM"
     ],
     "skipLibCheck": true,
     "esModuleInterop": true,

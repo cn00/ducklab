@@ -1,7 +1,5 @@
 /** @type {import('ts-jest').JestConfigWithTsJest} **/
-// module.exports =
-
-export default {
+module.exports = {
   moduleDirectories: [
     "node_modules",
     "src",

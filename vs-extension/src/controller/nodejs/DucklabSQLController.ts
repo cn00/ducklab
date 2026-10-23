@@ -1,11 +1,14 @@
 
 import * as vscode from "vscode";
 import { DuckdbDataSource } from './DuckdbDataSource';
-import { IFieldInfo, ITabularResultSet } from '@ducklab/core';
+import { ITabularResultSet } from '@ducklab/core';
 import { IControllerOpts } from '../IControllerOpts';
 import path from "path";
 import { getResourceId } from '../utils';
-import { DuckDBTypeId } from '@duckdb/node-api';
+import { expandNotebookSql } from '../notebookSqlEnvironment';
+import { errorMessage, redactSecrets } from '../sqlEnvironment';
+
+const TABLE_MIME_TYPE = 'application/vnd.ducklab.table+json';
 
 export class DucklabSQLController {
 
@@ -58,12 +61,15 @@ export class DucklabSQLController {
         const nbId = getResourceId(notebook.uri);
 
         if (!(nbId in this.kernels)) {
+            const workingDir = notebook.uri.scheme === 'file'
+                ? path.dirname(notebook.uri.fsPath)
+                : this.opts.workingDir;
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: "Initializing Kernel...",
             }, async (progress) => {
                 this.kernels[nbId] = new DuckdbDataSource(nbId, {
-                    dataSearchPath: this.opts.workingDir,
+                    dataSearchPath: workingDir,
                     dbPath: path.join(this.opts.tempPath, "ducklab", nbId + ".db")
                 });
                 await this.kernels[nbId].connect();
@@ -81,7 +87,7 @@ export class DucklabSQLController {
     async executeHandler(cells: vscode.NotebookCell[], notebook: vscode.NotebookDocument, controller: vscode.NotebookController) {
         const kernel = await this.resolveKernel(notebook);
         for (const cell of cells) {
-            this._doExecution(cell, kernel);
+            this._doExecution(cell, kernel, notebook.uri);
         }
     }
 
@@ -89,62 +95,9 @@ export class DucklabSQLController {
         Object.keys(this.kernels).map(k => this.kernels[k].dispose());
     }
 
-    private parseJsType(value: any, column: IFieldInfo) {
-        console.log("Data Type: ", column, value, typeof value);
-        switch (column.type) {
-            case "datetime":
-                return new Date(value).toLocaleString('sv', { timeZone: 'UTC' }) + "Z";
-            case "datetime_tz":
-                return new Date(value).toLocaleString('sv', { timeZoneName: "shortOffset" }).replace(" GMT", "");
-            case "date":
-                return new Date(value).toISOString().split("T")[0];
-            default:
-                return value;
-        }
-    }
-
-    private getRow(cols: IFieldInfo[], obj: any) {
-        let row = "";
-        for (let k of cols) {
-            row += `<td>${this.parseJsType(obj[k.name], k)}</td>`;
-        }
-        return `<tr>${row}</tr>`;
-    }
-
-    private getEllipsesRow(results: ITabularResultSet) {
-        let row = {};
-        for (let col of results.columns) {
-            row[col.name] = "...";
-        }
-        return row;
-    }
-
-    private renderTable(results: ITabularResultSet): string {
-        let values = results.values;
-        if (results.values.length > 50) {
-            values = results.values.slice(0, 5);
-            values.push(this.getEllipsesRow(results));
-            values = values.concat(results.values.slice(results.values.length - 5));
-        }
-        let text = `<table class="ducklab-table">
-        <thead><tr>${results.columns.map(c => '<th>' + c.name + '</th>').join("\n")}</tr></thead>
-        <tbody>${values.map(row => this.getRow(results.columns, row)).join("\n")}</tbody>
-        </table>
-        <style>
-        // .ducklab-table thead, .ducklab-table tbody {
-        //     display: block;
-        // }
-        // .ducklab-table tbody {
-        //     height: 100px;
-        //     overflow: auto;
-        // }
-        </style>
-        `;
-        return text;
-    }
-
-    private async _doExecution(cell: vscode.NotebookCell, kernel: DuckdbDataSource): Promise<void> {
+    private async _doExecution(cell: vscode.NotebookCell, kernel: DuckdbDataSource, notebookUri: vscode.Uri): Promise<void> {
         const execution = this._controller.createNotebookCellExecution(cell);
+        let secrets: string[] = [];
         execution.executionOrder = ++this._executionOrder;
         execution.start(Date.now()); // Keep track of elapsed time to execute cell.
 
@@ -157,24 +110,32 @@ export class DucklabSQLController {
                 const queryText = cellText.split('\n').slice(1).join('\n');
                 cellText = `CREATE OR REPLACE VIEW "${tblName}" AS (${queryText})\n; SELECT * FROM "${tblName}"`;
             }
-            console.debug("[Ducklab] Running: ", cellText);
-            const results = await kernel.queryNative(cellText);
-            console.debug("[Ducklab] Results: ", results);
-
-            let text = this.renderTable(results);
+            const expanded = await expandNotebookSql(cellText, notebookUri);
+            secrets = expanded.secrets;
+            console.debug("[Ducklab] Running SQL cell");
+            const results = await kernel.queryNative(expanded.query);
+            const tableData = {
+                columns: results.columns.map(({ name, type, nativeType }) => ({
+                    name,
+                    type,
+                    nativeType: String(nativeType)
+                })),
+                values: results.values
+            };
 
             execution.replaceOutput([
                 new vscode.NotebookCellOutput([
-                    vscode.NotebookCellOutputItem.text(text, "text/html")
+                    vscode.NotebookCellOutputItem.text(JSON.stringify(tableData), TABLE_MIME_TYPE)
                 ])
             ]);
             execution.end(true, Date.now());
         }
 
         catch (e) {
-            console.log("Exception during execution: ", e);
+            const message = redactSecrets(errorMessage(e), secrets);
+            console.error("[Ducklab] SQL execution failed:", message);
             execution.replaceOutput(new vscode.NotebookCellOutput([
-                vscode.NotebookCellOutputItem.error(new Error(e.message))
+                vscode.NotebookCellOutputItem.error(new Error(message))
             ]));
             execution.end(false, Date.now());
         }

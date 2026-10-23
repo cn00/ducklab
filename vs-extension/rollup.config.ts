@@ -75,5 +75,16 @@ const config = [
             format: 'cjs',
         },
     },
+    {
+        plugins: [
+            typescript(),
+            nodeResolve({ preferBuiltins: true }),
+        ],
+        input: 'src/renderer.ts',
+        output: {
+            file: 'out/renderer.js',
+            format: 'es',
+        },
+    },
 ] as RollupOptions;
 export default config;

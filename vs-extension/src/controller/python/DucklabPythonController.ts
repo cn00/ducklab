@@ -9,6 +9,8 @@ import { KernelSelector } from '../vs/KernelSelector';
 import path from 'path';
 import { IControllerOpts } from '../IControllerOpts';
 import { getResourceId } from '../utils';
+import { expandNotebookSql } from '../notebookSqlEnvironment';
+import { errorMessage, redactSecrets } from '../sqlEnvironment';
 
 
 export class DucklabPythonController implements IDisposable {
@@ -77,7 +79,7 @@ export class DucklabPythonController implements IDisposable {
         try {
             let kernel = await this.kSelector.resolveKernel(notebook);
             for (let cell of cells) {
-                await this._doExecution(cell, kernel);
+                await this._doExecution(cell, kernel, notebook.uri);
             }
         }
         catch (err) {
@@ -130,8 +132,9 @@ export class DucklabPythonController implements IDisposable {
         return text;
     }
 
-    private async _doExecution(cell: vscode.NotebookCell, kernel: IRunningKernel): Promise<void> {
+    private async _doExecution(cell: vscode.NotebookCell, kernel: IRunningKernel, notebookUri: vscode.Uri): Promise<void> {
         let failed = false;
+        let secrets: string[] = [];
         let currExecution = this._controller.createNotebookCellExecution(cell);
 
         currExecution.executionOrder = ++this._executionOrder;
@@ -154,8 +157,10 @@ export class DucklabPythonController implements IDisposable {
                     const queryText = cellText.split('\n').slice(1).join('\n');
                     cellText = `CREATE OR REPLACE VIEW "${tblName}" AS (${queryText})\n; SELECT * FROM "${tblName}"`;
                 }
-                console.debug("[Ducklab] Running: ", cellText);
-                resEmitter = await kernel.execute(`db.query(${JSON.stringify(cellText)})`);
+                const expanded = await expandNotebookSql(cellText, notebookUri);
+                secrets = expanded.secrets;
+                console.debug("[Ducklab] Running SQL cell");
+                resEmitter = await kernel.execute(`db.query(${JSON.stringify(expanded.query)})`);
             }
             resEmitter.on(async (event) => {
                 if (event.msgType === MessageType.Output) {
@@ -173,10 +178,11 @@ export class DucklabPythonController implements IDisposable {
                     }
                 }
                 if (event.msgType === MessageType.Error) {
-                    console.log("Error: ", event);
+                    const traceback = redactSecrets(String(event.content.traceback ?? 'Python kernel execution failed'), secrets);
+                    console.error("[Ducklab] Python kernel execution failed:", traceback);
                     failed = true;
                     await currExecution.appendOutput(new vscode.NotebookCellOutput([
-                        vscode.NotebookCellOutputItem.stderr(event.content.traceback)
+                        vscode.NotebookCellOutputItem.stderr(traceback)
                     ]));
                 }
             });
@@ -188,7 +194,11 @@ export class DucklabPythonController implements IDisposable {
         }
 
         catch (e) {
-            console.log("Exception during execution: ", e);
+            const message = redactSecrets(errorMessage(e), secrets);
+            console.error("[Ducklab] Cell execution failed:", message);
+            await currExecution.replaceOutput(new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.error(new Error(message))
+            ]));
             currExecution.end(false, Date.now());
         }
     }
