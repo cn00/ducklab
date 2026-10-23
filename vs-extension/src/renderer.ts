@@ -396,8 +396,8 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         updateSelection();
     }, { signal });
     document.addEventListener('pointerup', () => { draggingSelection = false; }, { signal });
-    grid.addEventListener('copy', event => {
-        if (!selection || !event.clipboardData) return;
+    document.addEventListener('copy', event => {
+        if (!selection || (document.activeElement !== grid && !grid.contains(document.activeElement))) return;
         const currentRows = data.queryId ? filteredRows() : filteredRows().slice(state.page * state.pageSize, (state.page + 1) * state.pageSize);
         const currentColumns = data.columns.filter(column => visible.has(column.name));
         const firstRow = Math.min(selection.startRow, selection.endRow);
@@ -415,8 +415,13 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
             ? selectedValues
             : [selectedColumns.map(column => column.name.replace(/[\t\r\n]+/g, ' ')).join('\t'), ...selectedValues]
         ).join('\r\n');
-        event.clipboardData.setData('text/plain', copied);
+        if (event.clipboardData) event.clipboardData.setData('text/plain', copied);
+        else void copyText(copied);
         event.preventDefault();
+    }, { capture: true, signal });
+    grid.addEventListener('blur', () => {
+        selection = null;
+        updateSelection();
     }, { signal });
 
     search.addEventListener('input', () => {
