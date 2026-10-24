@@ -55,9 +55,11 @@ export class DucklabPythonController implements IDisposable {
             vscode.workspace.onDidCloseNotebookDocument(nb => this.onNotebookClose(nb));
 
             // json stringify to escape the string
+            const allowUnsignedExtensions = vscode.workspace.getConfiguration('ducklab')
+                .get<boolean>('allowUnsignedExtensions', false);
             this.kSelector.init(`
                 import duckdb
-                db = duckdb.connect(r'${path.join(opts.tempPath, this.id)}.duckdb')
+                db = duckdb.connect(r'${path.join(opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
                 db.execute('set file_search_path=${JSON.stringify(opts.workingDir)};')
             `, 60000);
         }

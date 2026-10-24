@@ -15,17 +15,19 @@ targets=(
 )
 
 cp -rf ./node_modules/zeromq/build ./
+package_name=$(node -p "require('./package.json').name")
+package_version=$(node -p "require('./package.json').version")
 
 for p in "${targets[@]}"; do
     platform=$(echo $p | cut -d "-" -f 1)
     arch=$(echo $p | cut -d "-" -f 2)
  
     # # Package extension
-    npx vsce package --no-dependencies --target $platform-$arch --out ./dist --baseContentUrl https://raw.githubusercontent.com/ducklake-hq/ducklab/refs/heads/main/vs-extension/ --baseImagesUrl https://raw.githubusercontent.com/ducklake-hq/ducklab/refs/heads/main/vs-extension/
-    files=(dist/*-"$platform"-"$arch"-*.vsix)
+    vsix_path="dist/${package_name}-${p}-${package_version}.vsix"
+    npx vsce package --no-dependencies --target "$p" --out "$vsix_path" --baseContentUrl https://raw.githubusercontent.com/ducklake-hq/ducklab/refs/heads/main/vs-extension/ --baseImagesUrl https://raw.githubusercontent.com/ducklake-hq/ducklab/refs/heads/main/vs-extension/
 
     rm -rf dist/extracted/
-    unzip "${files[0]}" -d dist/extracted/
+    unzip "$vsix_path" -d dist/extracted/
     mkdir -p dist/extracted/extension/node_modules/@duckdb/node-bindings-$platform-$arch
     cp -rL node_modules/@duckdb/node-bindings-$platform-$arch dist/extracted/extension/node_modules/@duckdb/
     case "$platform" in
@@ -43,10 +45,10 @@ for p in "${targets[@]}"; do
             exit 1
             ;;
     esac
-    rm -- "${files[0]}"
+    rm -- "$vsix_path"
     cd dist/extracted/
-    zip -r "../../${files[0]}" ./
+    zip -r "../../$vsix_path" ./
     cd ../../
-    # zip -ur "${files[0]}" extension/ node_modules/@duckdb/node-bindings/
+    unzip -p "$vsix_path" "extension/node_modules/@duckdb/node-bindings-$p/duckdb.node" > /dev/null
 
 done

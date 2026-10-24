@@ -44,6 +44,17 @@
     "onNotebook:isql"
   ],
   "contributes": {
+    "configuration": {
+      "title": "Ducklab",
+      "properties": {
+        "ducklab.allowUnsignedExtensions": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "markdownDescription": "Allow loading unsigned DuckDB extensions in SQL Only, Python/SQL, and PySpark/SQL kernels (equivalent to DuckDB CLI `-unsigned`). Unsigned extensions execute native code; enable only for extensions you trust. Reload the VS Code window after changing this setting."
+        }
+      }
+    },
     "notebooks": [
       {
         "type": "isql",

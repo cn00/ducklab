@@ -31,6 +31,7 @@ export class DuckdbDataSource extends TabularDataSource {
       previewLimit: 1000,
       rawLimit: -1,
       extensions: [],
+      allowUnsignedExtensions: false,
       dbPath: "./temp_duckdb.db",
       dataSearchPath: "./data/",
       ...duckOpts,
@@ -41,7 +42,9 @@ export class DuckdbDataSource extends TabularDataSource {
     if (this.opts.dbPath && this.opts.dbPath !== ':memory:') {
       await mkdir(dirname(this.opts.dbPath), { recursive: true });
     }
-    const db = await (await DuckDBInstance.create(this.opts.dbPath)).connect();
+    const db = await (await DuckDBInstance.create(this.opts.dbPath, {
+      allow_unsigned_extensions: String(this.opts.allowUnsignedExtensions)
+    })).connect();
     await db.run(`set file_search_path='${this.opts.dataSearchPath}';`);
     console.log("Init duckdb: ", db);
     return db;
@@ -197,6 +200,7 @@ export class DuckdbDataSource extends TabularDataSource {
 }
 
 export interface DuckOptions {
+  allowUnsignedExtensions?: boolean;
   batchSize?: number;
   extensions?: string[];
   previewLimit?: number;

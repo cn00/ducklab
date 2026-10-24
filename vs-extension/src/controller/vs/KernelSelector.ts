@@ -20,8 +20,12 @@ export class KernelSelector {
             await this._python.ready;
         }
         this.listenEnvironmentChangeEvent();
-        entry_script = entry_script.replace("\r\n", "\n");
-        this.entry_script = entry_script.split("\n").map(x => x.trim()).join("\n"); // remove whitespaces from eahc line
+        const lines = entry_script.replace(/\r\n/g, "\n").split("\n");
+        const nonEmptyLines = lines.filter(line => line.trim());
+        const indentation = nonEmptyLines.length
+            ? Math.min(...nonEmptyLines.map(line => line.length - line.trimStart().length))
+            : 0;
+        this.entry_script = lines.map(line => line.slice(indentation)).join("\n");
         this.init_timeout_ms = init_timeout_ms;
     }
 

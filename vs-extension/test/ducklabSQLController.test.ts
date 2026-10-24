@@ -6,6 +6,7 @@ jest.mock('vscode', () => ({
         }))
     },
     workspace: {
+        getConfiguration: jest.fn(() => ({ get: jest.fn((_name, fallback) => fallback) })),
         onDidCloseNotebookDocument: jest.fn(() => ({ dispose: jest.fn() }))
     },
     window: {
@@ -49,6 +50,7 @@ describe('SQL Only database location', () => {
             const kernel = await controller.resolveKernel(notebook);
 
             expect(DuckdbDataSource).toHaveBeenCalledWith(getResourceId(uri), {
+                allowUnsignedExtensions: false,
                 dbPath: join('/mock-home', '.ducklab', getResourceId(uri) + '.db'),
                 dataSearchPath: uri.scheme === 'file' ? dirname(uri.fsPath) : '/workspace'
             });
@@ -56,6 +58,23 @@ describe('SQL Only database location', () => {
             expect(kernel.loadExtensions).toHaveBeenCalledTimes(1);
             expect(await controller.resolveKernel(notebook)).toBe(kernel);
             expect(DuckdbDataSource).toHaveBeenCalledTimes(1);
+        } finally {
+            controller.dispose();
+            registry.dispose();
+        }
+    });
+
+    test.each([true, false])('passes the unsigned extensions setting: %s', async enabled => {
+        const get = jest.fn(() => enabled);
+        jest.mocked(vscode.workspace.getConfiguration).mockReturnValueOnce({ get } as vscode.WorkspaceConfiguration);
+        const registry = new TableQueryRegistry();
+        const controller = new DucklabSQLController({ tempPath: '/system-temp', workingDir: '/workspace' }, registry);
+        try {
+            await controller.resolveKernel({ uri: URI.file('/workspace/unsigned.isql') } as vscode.NotebookDocument);
+            expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('ducklab');
+            expect(get).toHaveBeenCalledWith('allowUnsignedExtensions', false);
+            expect(DuckdbDataSource).toHaveBeenCalledWith(expect.any(String),
+                expect.objectContaining({ allowUnsignedExtensions: enabled }));
         } finally {
             controller.dispose();
             registry.dispose();

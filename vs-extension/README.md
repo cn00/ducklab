@@ -61,6 +61,20 @@ DuckLab for VS Code provides data analysis features for SQL, PySpark and Python.
 
 The SQL Only kernel stores each notebook's database in `~/.ducklab` (the `.ducklab` directory in your home directory). Ducklab creates this directory automatically when opening the database. Existing databases in the system temporary directory are not migrated automatically.
 
+#### Unsigned DuckDB extensions
+
+To load a trusted unsigned extension, enable **Ducklab: Allow Unsigned Extensions** in VS Code User Settings, or add the following to your user settings:
+
+```json
+{
+  "ducklab.allowUnsignedExtensions": true
+}
+```
+
+This setting defaults to `false` and applies to SQL Only, Python/SQL, and PySpark/SQL kernels. It sets DuckDB's startup option `allow_unsigned_extensions`, equivalent to the CLI `-unsigned` flag. Reload the VS Code window after changing it. This is a user-level setting, not a workspace setting.
+
+Unsigned extensions execute native code with your user permissions. Only enable this for extensions you trust. PySpark/SQL uses a configured SparkContext connection when enabled because DuckDB's experimental Spark builder does not apply `config()` options.
+
 #### SQL environment variables
 
 Place a `.env` file next to the `.isql` notebook to provide values for SQL cells. Ducklab expands `$NAME` and `${NAME}` before running SQL in the SQL Only, Python/SQL, and PySpark/SQL kernels. Python cells are not modified. The `.env` file is re-read for each SQL cell; its values override matching extension process environment variables. If a referenced name is missing from both sources, execution stops and reports the missing name.

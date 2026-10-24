@@ -1,3 +1,28 @@
+-- %% SQL_RAW | unnamed
+install postgres;
+from duckdb_extensions()
+order by install_path desc;
+-- %% SQL_RAW | unnamed
+from duckdb_settings()
+-- %% SQL_RAW | unnamed
+show schemas;
+-- show tables;
+-- %% MD | unnamed
+### use mssql
+-- %% SQL_RAW | unnamed
+-- INSTALL mssql FROM community;
+-- Set allow_unsigned_extensions = true;
+LOAD mssql;
+ATTACH 'Server=$MSSQL_HOST,$MSSQL_PORT;Database=$MSSQL_DATABASE;User Id=$MSSQL_USER;Password=$MSSQL_PASSWORD;TrustServerCertificate=yes' AS mdm (TYPE mssql);
+ATTACH 'Server=$MSSQL_HOST,$MSSQL_PORT;Database=IQVIA-iSales;User Id=$MSSQL_USER;Password=$MSSQL_PASSWORD;TrustServerCertificate=yes' AS isales (TYPE mssql);
+show schemas;
+-- %% SQL_RAW | unnamed
+use isales;
+show tables;
+-- %% SQL_RAW | unnamed
+from isales.sys_auth_position;
+-- %% SQL_RAW | unnamed
+from mdm.stg_m_his_geo;
 -- %% SQL_RAW | mytable
 
 select * from mytable1232

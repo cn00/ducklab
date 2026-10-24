@@ -17,8 +17,11 @@ describe('DuckDB database initialization', () => {
         await rm(tempPath, { recursive: true, force: true });
     });
 
-    function createSource(dbPath: string) {
-        const source = new DuckdbDataSource('test', { dbPath, dataSearchPath: tempPath });
+    function createSource(dbPath: string, allowUnsignedExtensions?: boolean) {
+        const source = new DuckdbDataSource('test', {
+            dbPath, dataSearchPath: tempPath,
+            ...(allowUnsignedExtensions === undefined ? {} : { allowUnsignedExtensions })
+        });
         sources.push(source);
         return source;
     }
@@ -52,6 +55,14 @@ describe('DuckDB database initialization', () => {
         const result = await source.queryNative('SELECT 42 AS answer');
 
         expect(result.values).toEqual([{ _index: 0, answer: 42 }]);
+    });
+
+    test.each([undefined, false, true])('sets the unsigned extensions startup option to %s', async enabled => {
+        const source = createSource(':memory:', enabled);
+        const result = await source.queryNative(
+            "SELECT current_setting('allow_unsigned_extensions') AS enabled");
+
+        expect(result.values).toEqual([{ _index: 0, enabled: enabled ?? false }]);
     });
 
     test('reports a parent path blocked by a file without overwriting it', async () => {

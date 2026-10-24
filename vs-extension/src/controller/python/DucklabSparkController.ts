@@ -50,9 +50,22 @@ export class DucklabSparkController implements IDisposable {
 
 
             // json stringify to escape the string
+            const allowUnsignedExtensions = vscode.workspace.getConfiguration('ducklab')
+                .get<boolean>('allowUnsignedExtensions', false);
+            // DuckDB's Spark builder ignores config(); configure its connection at creation.
+            const sparkInitialization = allowUnsignedExtensions ? `
+                from duckdb.experimental.spark.context import SparkContext
+                class _DucklabSparkContext(SparkContext):
+                    def __init__(self):
+                        self._connection = duckdb.connect(':memory:', config={'allow_unsigned_extensions': 'true'})
+                        self._connection.execute("set default_null_order='nulls_first_on_asc_last_on_desc'")
+                spark = SparkSession(_DucklabSparkContext())
+            ` : `
+                spark = SparkSession.builder.getOrCreate()
+            `;
             this.kSelector.init(`
                 import duckdb
-                db = duckdb.connect(r'${path.join(this.opts.tempPath, this.id)}.duckdb')
+                db = duckdb.connect(r'${path.join(this.opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
                 db.execute('set file_search_path=${JSON.stringify(opts.workingDir)};')
                 
                 # import os
@@ -60,7 +73,7 @@ export class DucklabSparkController implements IDisposable {
                 # sys.path.append(os.path.abspath('./pyspark.py'))  # can be used to rename duckdb.experimental.spark to pyspark
                 
                 from duckdb.experimental.spark.sql import SparkSession
-                spark = SparkSession.builder.getOrCreate()
+${sparkInitialization}
 
             `, 60000);
 
