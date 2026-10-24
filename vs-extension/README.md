@@ -132,6 +132,12 @@ display(df)
 
 Contributions are most welcome. There are various ways you can contribute,
 
+### Installing extension dependencies
+
+Use pnpm `10.33.3` and run `pnpm install --frozen-lockfile` from `vs-extension`. The checked-in `pnpm-workspace.yaml` approves installation scripts only for `@vscode/vsce-sign`, `keytar`, and `zeromq`, so CI does not require interactive `pnpm approve-builds`. Review any new dependency build scripts before adding them to this list.
+
+VSIX packages retain only their target operating system's native binaries under `extension/build`: Darwin packages exclude Linux and Windows binaries, Linux packages exclude Darwin and Windows binaries, and Windows packages exclude Darwin and Linux binaries.
+
 ### Implement a new feature
 1. Create an issue and provide your reasoning on why you want to add this feature.
 2. Discuss your approach and design.
