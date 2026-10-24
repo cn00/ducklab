@@ -9,6 +9,8 @@ import {
   type ITabularExecuteOpts,
 } from '@ducklab/core';
 import { DuckDBConnection, DuckDBInstance, DuckDBMaterializedResult, DuckDBType, DuckDBTypeId } from "@duckdb/node-api";
+import { mkdir } from 'fs/promises';
+import { dirname } from 'path';
 
 
 // polyfill
@@ -36,6 +38,9 @@ export class DuckdbDataSource extends TabularDataSource {
   }
 
   public async _init() {
+    if (this.opts.dbPath && this.opts.dbPath !== ':memory:') {
+      await mkdir(dirname(this.opts.dbPath), { recursive: true });
+    }
     const db = await (await DuckDBInstance.create(this.opts.dbPath)).connect();
     await db.run(`set file_search_path='${this.opts.dataSearchPath}';`);
     console.log("Init duckdb: ", db);

@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { DuckdbDataSource } from './DuckdbDataSource';
 import { IControllerOpts } from '../IControllerOpts';
 import path from "path";
+import { homedir } from 'os';
 import { getResourceId } from '../utils';
 import { expandNotebookSql } from '../notebookSqlEnvironment';
 import { errorMessage, redactSecrets } from '../sqlEnvironment';
@@ -70,7 +71,7 @@ export class DucklabSQLController {
             }, async (progress) => {
                 this.kernels[nbId] = new DuckdbDataSource(nbId, {
                     dataSearchPath: workingDir,
-                    dbPath: path.join(this.opts.tempPath, "ducklab", nbId + ".db")
+                    dbPath: path.join(homedir(), ".ducklab", nbId + ".db")
                 });
                 await this.kernels[nbId].connect();
                 progress.report({ message: "Loading Default Extensions..." });

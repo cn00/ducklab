@@ -59,6 +59,8 @@ DuckLab for VS Code provides data analysis features for SQL, PySpark and Python.
 2. Select kernel `SQL Only`
 3. Run SQL queries e.g. `select * from 'data/MOCK_DATA.csv';`
 
+The SQL Only kernel stores each notebook's database in `~/.ducklab` (the `.ducklab` directory in your home directory). Ducklab creates this directory automatically when opening the database. Existing databases in the system temporary directory are not migrated automatically.
+
 #### SQL environment variables
 
 Place a `.env` file next to the `.isql` notebook to provide values for SQL cells. Ducklab expands `$NAME` and `${NAME}` before running SQL in the SQL Only, Python/SQL, and PySpark/SQL kernels. Python cells are not modified. The `.env` file is re-read for each SQL cell; its values override matching extension process environment variables. If a referenced name is missing from both sources, execution stops and reports the missing name.
