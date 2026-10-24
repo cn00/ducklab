@@ -7,11 +7,11 @@ mkdir -p ./dist
 
 # Targets to build against
 targets=(
-    # "win32-x64" # DuckDB appears to not have ia32 nor arm64 builds for Windows
-    # "linux-x64"
-    # "linux-arm64"
+    "win32-x64" # DuckDB appears to not have ia32 nor arm64 builds for Windows
+    "linux-x64"
+    "linux-arm64"
     "darwin-x64"
-    # "darwin-arm64"
+    "darwin-arm64"
 )
 
 cp -rf ./node_modules/zeromq/build ./
