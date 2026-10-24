@@ -23,11 +23,32 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run build
           pnpm run package
-      - name: Upload VSIX artifacts
+      - name: Verify VSIX packages
+        run: |
+          if ! compgen -G 'vs-extension/dist/*.vsix' > /dev/null; then
+            echo "::error::No VSIX packages were generated"
+            exit 1
+          fi
+      - name: Upload Windows VSIX artifacts
+        if: ${{ hashFiles('vs-extension/dist/*-win32-*.vsix') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ducklab-vsix
-          path: vs-extension/dist/*.vsix
+          name: ducklab-vsix-windows
+          path: vs-extension/dist/*-win32-*.vsix
+          if-no-files-found: error
+      - name: Upload Linux VSIX artifacts
+        if: ${{ hashFiles('vs-extension/dist/*-linux-*.vsix') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ducklab-vsix-linux
+          path: vs-extension/dist/*-linux-*.vsix
+          if-no-files-found: error
+      - name: Upload macOS VSIX artifacts
+        if: ${{ hashFiles('vs-extension/dist/*-darwin-*.vsix') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ducklab-vsix-macos
+          path: vs-extension/dist/*-darwin-*.vsix
           if-no-files-found: error
 
   publish:
@@ -45,7 +66,8 @@ jobs:
       - name: Download VSIX artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ducklab-vsix
+          pattern: ducklab-vsix-*
+          merge-multiple: true
           path: vs-extension/dist
       - name: Publish to VS Code Marketplace
         working-directory: ./vs-extension
