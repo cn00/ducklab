@@ -19,8 +19,8 @@ jobs:
       - working-directory: ./vs-extension
         run: |
           chmod +x package.sh
-          npm i -g pnpm
-          pnpm install
+          npm i -g pnpm@10.33.3
+          pnpm install --frozen-lockfile
           pnpm run build
           pnpm run package
       - name: Upload VSIX artifacts
@@ -40,8 +40,8 @@ jobs:
           node-version: 20
       - working-directory: ./vs-extension
         run: |
-          npm i -g pnpm
-          pnpm install
+          npm i -g pnpm@10.33.3
+          pnpm install --frozen-lockfile
       - name: Download VSIX artifacts
         uses: actions/download-artifact@v4
         with:
