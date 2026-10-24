@@ -9,9 +9,9 @@ module.exports = {
   },
   testEnvironment: "node",
   transform: {
-    "^.+.tsx?$": ["ts-jest", {}],
+    "^.+\\.[tj]sx?$": ["ts-jest", {}],
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(@apache-arrow/ts))"
+    "node_modules/(?!(@apache-arrow/ts|.*@ducklab[+/]core))"
   ]
 };
