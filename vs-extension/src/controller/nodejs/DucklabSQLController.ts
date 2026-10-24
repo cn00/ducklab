@@ -70,6 +70,8 @@ export class DucklabSQLController {
                 title: "Initializing Kernel...",
             }, async (progress) => {
                 this.kernels[nbId] = new DuckdbDataSource(nbId, {
+                    databaseName: vscode.workspace.getConfiguration('ducklab', notebook.uri)
+                        .get<string>('databaseName', 'ducklab'),
                     allowUnsignedExtensions: vscode.workspace.getConfiguration('ducklab')
                         .get<boolean>('allowUnsignedExtensions', false),
                     dataSearchPath: workingDir,

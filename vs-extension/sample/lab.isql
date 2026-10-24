@@ -14,7 +14,7 @@ show schemas;
 -- Set allow_unsigned_extensions = true;
 LOAD mssql;
 ATTACH 'Server=$MSSQL_HOST,$MSSQL_PORT;Database=$MSSQL_DATABASE;User Id=$MSSQL_USER;Password=$MSSQL_PASSWORD;TrustServerCertificate=yes' AS mdm (TYPE mssql);
-ATTACH 'Server=$MSSQL_HOST,$MSSQL_PORT;Database=IQVIA-iSales;User Id=$MSSQL_USER;Password=$MSSQL_PASSWORD;TrustServerCertificate=yes' AS isales (TYPE mssql);
+ATTACH 'Server=$MSSQL_HOST,$MSSQL_PORT;Database=$MSSQL_DATABASE2;User Id=$MSSQL_USER;Password=$MSSQL_PASSWORD;TrustServerCertificate=yes' AS isales (TYPE mssql);
 show schemas;
 -- %% SQL_RAW | unnamed
 use isales;
@@ -22,13 +22,13 @@ show tables;
 -- %% SQL_RAW | unnamed
 from isales.sys_auth_position;
 -- %% SQL_RAW | unnamed
-from mdm.stg_m_his_geo;
+from mdm.dbo.stg_m_his_geo;
 -- %% SQL_RAW | mytable
 
 select * from mytable1232
 -- %% SQL_RAW | unnamed
 
-create or replace view myview as (
+create or replace view main.myview as (
     select *
     from "data/MOCK_DATA.csv"
     limit 10

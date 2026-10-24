@@ -50,6 +50,7 @@ describe('SQL Only database location', () => {
             const kernel = await controller.resolveKernel(notebook);
 
             expect(DuckdbDataSource).toHaveBeenCalledWith(getResourceId(uri), {
+                databaseName: 'ducklab',
                 allowUnsignedExtensions: false,
                 dbPath: join('/mock-home', '.ducklab', getResourceId(uri) + '.db'),
                 dataSearchPath: uri.scheme === 'file' ? dirname(uri.fsPath) : '/workspace'
@@ -65,8 +66,8 @@ describe('SQL Only database location', () => {
     });
 
     test.each([true, false])('passes the unsigned extensions setting: %s', async enabled => {
-        const get = jest.fn(() => enabled);
-        jest.mocked(vscode.workspace.getConfiguration).mockReturnValueOnce({ get } as vscode.WorkspaceConfiguration);
+        const get = jest.fn((name, fallback) => name === 'allowUnsignedExtensions' ? enabled : fallback);
+        jest.mocked(vscode.workspace.getConfiguration).mockReturnValue({ get } as vscode.WorkspaceConfiguration);
         const registry = new TableQueryRegistry();
         const controller = new DucklabSQLController({ tempPath: '/system-temp', workingDir: '/workspace' }, registry);
         try {
@@ -75,6 +76,30 @@ describe('SQL Only database location', () => {
             expect(get).toHaveBeenCalledWith('allowUnsignedExtensions', false);
             expect(DuckdbDataSource).toHaveBeenCalledWith(expect.any(String),
                 expect.objectContaining({ allowUnsignedExtensions: enabled }));
+        } finally {
+            controller.dispose();
+            registry.dispose();
+            jest.mocked(vscode.workspace.getConfiguration).mockImplementation(() => ({
+                get: jest.fn((_name, fallback) => fallback)
+            } as vscode.WorkspaceConfiguration));
+        }
+    });
+
+    test('reads the database name from notebook-scoped settings without changing its file path', async () => {
+        jest.mocked(vscode.workspace.getConfiguration).mockImplementation(() => ({
+            get: jest.fn((name, fallback) => name === 'databaseName' ? 'analytics' : fallback)
+        } as vscode.WorkspaceConfiguration));
+        const registry = new TableQueryRegistry();
+        const controller = new DucklabSQLController({ tempPath: '/system-temp', workingDir: '/workspace' }, registry);
+        const uri = URI.file('/workspace/report.isql');
+        try {
+            await controller.resolveKernel({ uri } as vscode.NotebookDocument);
+            expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('ducklab', uri);
+            expect(DuckdbDataSource).toHaveBeenCalledWith(getResourceId(uri),
+                expect.objectContaining({
+                    databaseName: 'analytics',
+                    dbPath: join('/mock-home', '.ducklab', getResourceId(uri) + '.db')
+                }));
         } finally {
             controller.dispose();
             registry.dispose();

@@ -47,6 +47,13 @@
     "configuration": {
       "title": "Ducklab",
       "properties": {
+        "ducklab.databaseName": {
+          "type": "string",
+          "default": "ducklab",
+          "scope": "resource",
+          "pattern": "^(?!(?:[mM][eE][mM][oO][rR][yY]|[sS][yY][sS][tT][eE][mM]|[tT][eE][mM][pP])$)[A-Za-z_][A-Za-z0-9_]*$",
+          "markdownDescription": "Default database name for the SQL Only kernel. Keeps the notebook's existing database file and data; changes its SQL catalog alias only. Use letters, digits, and underscores, starting with a letter or underscore. The names memory, system, and temp are reserved. Close and reopen the notebook after changing this setting. Existing SQL qualified with the old database name must be updated."
+        },
         "ducklab.allowUnsignedExtensions": {
           "type": "boolean",
           "default": false,

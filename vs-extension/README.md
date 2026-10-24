@@ -61,6 +61,20 @@ DuckLab for VS Code provides data analysis features for SQL, PySpark and Python.
 
 The SQL Only kernel stores each notebook's database in `~/.ducklab` (the `.ducklab` directory in your home directory). Ducklab creates this directory automatically when opening the database. Existing databases in the system temporary directory are not migrated automatically.
 
+#### Default database name
+
+The SQL Only kernel uses `ducklab` as its default database name. Set `ducklab.databaseName` in VS Code user or workspace settings to customize it:
+
+```json
+{
+  "ducklab.databaseName": "ducklab"
+}
+```
+
+Close and reopen the notebook after changing this setting. Each notebook keeps its original independent database file and existing data; only its SQL catalog alias changes. Update queries that explicitly qualify tables with the previous database name. Names must start with a letter or underscore and contain only letters, digits, and underscores; `memory`, `system`, and `temp` are reserved (case-insensitive).
+
+The file is attached under the configured alias and selected as the default database, so `current_database()` returns that name and unqualified tables are stored there. An additional internal `memory` database appears in database/schema listings. Python/SQL and PySpark/SQL are unchanged.
+
 #### Unsigned DuckDB extensions
 
 To load a trusted unsigned extension, enable **Ducklab: Allow Unsigned Extensions** in VS Code User Settings, or add the following to your user settings:

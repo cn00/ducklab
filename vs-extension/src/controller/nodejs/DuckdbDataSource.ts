@@ -22,6 +22,7 @@ export class DuckdbDataSource extends TabularDataSource {
   private _tr: SqlTranslator;
   public readonly opts: Required<DuckOptions>;
   private _db: DuckDBConnection | null = null;
+  private _instance: DuckDBInstance | null = null;
 
   constructor(name: string, duckOpts: DuckOptions) {
     super(name);
@@ -32,6 +33,7 @@ export class DuckdbDataSource extends TabularDataSource {
       rawLimit: -1,
       extensions: [],
       allowUnsignedExtensions: false,
+      databaseName: 'ducklab',
       dbPath: "./temp_duckdb.db",
       dataSearchPath: "./data/",
       ...duckOpts,
@@ -39,15 +41,30 @@ export class DuckdbDataSource extends TabularDataSource {
   }
 
   public async _init() {
+    const databaseName = this.opts.databaseName;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(databaseName) || /^(memory|system|temp)$/i.test(databaseName)) {
+      throw new Error('Invalid ducklab.databaseName: use letters, digits, and underscores, starting with a letter or underscore; memory, system, and temp are reserved.');
+    }
     if (this.opts.dbPath && this.opts.dbPath !== ':memory:') {
       await mkdir(dirname(this.opts.dbPath), { recursive: true });
     }
-    const db = await (await DuckDBInstance.create(this.opts.dbPath, {
+    const instance = await DuckDBInstance.create(':memory:', {
       allow_unsigned_extensions: String(this.opts.allowUnsignedExtensions)
-    })).connect();
-    await db.run(`set file_search_path='${this.opts.dataSearchPath}';`);
-    console.log("Init duckdb: ", db);
-    return db;
+    });
+    let db: DuckDBConnection | undefined;
+    try {
+      db = await instance.connect();
+      const dbPath = (this.opts.dbPath || ':memory:').replace(/'/g, "''");
+      await db.run(`ATTACH '${dbPath}' AS "${databaseName}"; USE "${databaseName}";`);
+      await db.run(`set file_search_path='${this.opts.dataSearchPath.replace(/'/g, "''")}';`);
+      this._instance = instance;
+      console.log("Init duckdb: ", db);
+      return db;
+    } catch (error) {
+      db?.closeSync();
+      instance.closeSync();
+      throw error;
+    }
   }
 
   public async test(): Promise<void> {
@@ -196,10 +213,14 @@ export class DuckdbDataSource extends TabularDataSource {
 
   dispose() {
     this._db?.closeSync();
+    this._db = null;
+    this._instance?.closeSync();
+    this._instance = null;
   }
 }
 
 export interface DuckOptions {
+  databaseName?: string;
   allowUnsignedExtensions?: boolean;
   batchSize?: number;
   extensions?: string[];
