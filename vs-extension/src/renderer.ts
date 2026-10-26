@@ -247,7 +247,7 @@ function create<K extends keyof HTMLElementTagNameMap>(tag: K, className?: strin
 
 function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, context: RendererContext<unknown>, onMessage: (listener: (message: TableResponse) => void) => () => void): void {
     const visible = new Set(data.columns.map(column => column.name));
-    const state = { query: '', page: 0, pageSize: 10, sortColumn: '', sortAscending: true, explore: true };
+    const state = { query: '', page: 0, pageSize: 10, sortColumn: '', sortAscending: true, expanded: true };
     let totalRows = data.totalRows ?? data.values.length;
     let currentStats = data.stats;
     let requestNumber = 0;
@@ -323,14 +323,14 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
     }, { signal });
     const explore = create('button', 'ducklab-explore-toggle');
     explore.type = 'button';
-    explore.setAttribute('aria-expanded', String(state.explore));
-    explore.setAttribute('aria-label', state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics');
-    explore.title = state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics';
+    explore.setAttribute('aria-expanded', String(state.expanded));
+    explore.setAttribute('aria-label', state.expanded ? 'Collapse statistics and data rows' : 'Expand statistics and data rows');
+    explore.title = state.expanded ? 'Collapse statistics and data rows' : 'Expand statistics and data rows';
     explore.addEventListener('click', () => {
-        state.explore = !state.explore;
-        explore.setAttribute('aria-expanded', String(state.explore));
-        explore.setAttribute('aria-label', state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics');
-        explore.title = state.explore ? 'Collapse Explore statistics' : 'Expand Explore statistics';
+        state.expanded = !state.expanded;
+        explore.setAttribute('aria-expanded', String(state.expanded));
+        explore.setAttribute('aria-label', state.expanded ? 'Collapse statistics and data rows' : 'Expand statistics and data rows');
+        explore.title = state.expanded ? 'Collapse statistics and data rows' : 'Expand statistics and data rows';
         if (data.queryId) void refresh(); else draw();
     }, { signal });
     const exportButton = create('button', '', 'Export CSV');
@@ -712,7 +712,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         if (!data.queryId) { draw(); return; }
         const version = ++refreshVersion;
         const response = await sendRequest({ operation: 'page', page: state.page, pageSize: state.pageSize,
-            filters: filtersForRequest(), sortColumn: state.sortColumn || undefined, sortAscending: state.sortAscending, includeStats: state.explore });
+            filters: filtersForRequest(), sortColumn: state.sortColumn || undefined, sortAscending: state.sortAscending, includeStats: state.expanded });
         if (version !== refreshVersion) return;
         if (!response?.ok || !response.data) {
             loadError = response?.error ?? 'Could not load this page.';
@@ -791,23 +791,25 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
                 void refresh();
             }, { signal });
             th.append(columnName);
-            if (state.explore) appendColumnExplore(th, column, rows, currentStats?.[column.name], Boolean(data.queryId && !currentStats));
+            if (state.expanded) appendColumnExplore(th, column, rows, currentStats?.[column.name], Boolean(data.queryId && !currentStats));
             th.append(createColumnActions(column));
             headRow.append(th);
         }
         head.append(headRow);
         const body = create('tbody');
         const start = state.page * state.pageSize;
-        for (const [rowIndex, row] of (data.queryId ? rows : rows.slice(start, start + state.pageSize)).entries()) {
-            const tr = create('tr');
-            tr.append(create('td', 'ducklab-row-number', String(start + rowIndex + 1)));
-            for (const [columnIndex, column] of columns.entries()) {
-                const td = create('td', wrappedColumns.has(column.name) ? 'ducklab-wrap' : '', formatCellValue(row[column.name], columnFormats.get(column.name)));
-                td.dataset.row = String(rowIndex);
-                td.dataset.column = String(columnIndex);
-                tr.append(td);
+        if (state.expanded) {
+            for (const [rowIndex, row] of (data.queryId ? rows : rows.slice(start, start + state.pageSize)).entries()) {
+                const tr = create('tr');
+                tr.append(create('td', 'ducklab-row-number', String(start + rowIndex + 1)));
+                for (const [columnIndex, column] of columns.entries()) {
+                    const td = create('td', wrappedColumns.has(column.name) ? 'ducklab-wrap' : '', formatCellValue(row[column.name], columnFormats.get(column.name)));
+                    td.dataset.row = String(rowIndex);
+                    td.dataset.column = String(columnIndex);
+                    tr.append(td);
+                }
+                body.append(tr);
             }
-            body.append(tr);
         }
         grid.append(head, body);
         applyFreeze(columns);
@@ -834,7 +836,7 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
         applyAt(frozenIndex + 1, frozenColumn.side === 'left' ? ROW_NUMBER_WIDTH : 0);
     }
     draw();
-    if (data.queryId && state.explore) void refresh();
+    if (data.queryId && state.expanded) void refresh();
 }
 
 export const activate: ActivationFunction<unknown> = (context: RendererContext<unknown>) => {
