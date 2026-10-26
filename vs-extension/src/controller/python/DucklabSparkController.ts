@@ -11,7 +11,7 @@ import { IControllerOpts } from '../IControllerOpts';
 import { expandNotebookSql } from '../notebookSqlEnvironment';
 import { errorMessage, redactSecrets } from '../sqlEnvironment';
 import { createPagedTableResult, quoteSqlIdentifier, TABLE_MIME_TYPE, TableQueryRegistry } from '../tableQuery';
-import { executePythonQuery, executeSparkQuery, PANDAS_DATAFRAME_MIME_TYPE, registeredPandasDataFrameName } from '../kernelTableQuery';
+import { executePythonQuery, executeSparkQuery, pandasDataFrameFormatterCode, PANDAS_DATAFRAME_MIME_TYPE, registeredPandasDataFrameName } from '../kernelTableQuery';
 
 
 export class DucklabSparkController implements IDisposable {
@@ -68,23 +68,7 @@ export class DucklabSparkController implements IDisposable {
             this.kSelector.init(`
                 import duckdb
                 db = duckdb.connect(r'${path.join(this.opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
-${renderPandasDataframes ? `
-                try:
-                    import pandas as _ducklab_pandas
-                    from IPython import get_ipython as _ducklab_get_ipython
-                    def _ducklab_format_pandas_dataframe(_ducklab_dataframe):
-                        try:
-                            import uuid as _ducklab_uuid
-                            _ducklab_table_name = "__ducklab_dataframe_" + _ducklab_uuid.uuid4().hex
-                            db.register(_ducklab_table_name, _ducklab_dataframe)
-                            return {"tableName": _ducklab_table_name}
-                        except Exception:
-                            return None
-                    _ducklab_get_ipython().display_formatter.formatters['${PANDAS_DATAFRAME_MIME_TYPE}'].for_type(
-                        _ducklab_pandas.DataFrame, _ducklab_format_pandas_dataframe)
-                except Exception:
-                    pass
-` : ''}
+${pandasDataFrameFormatterCode(renderPandasDataframes)}
                 
                 # import os
                 # import sys

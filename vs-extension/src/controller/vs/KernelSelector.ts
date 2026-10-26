@@ -14,8 +14,14 @@ export class KernelSelector {
     private kernelMap: { [nbId: string]: string; } = {};
     private entry_script: string;
     private init_timeout_ms: number;
+    private initialization: Promise<void> | undefined;
 
-    async init(entry_script: string = null, init_timeout_ms = 60000) {
+    init(entry_script: string = null, init_timeout_ms = 60000): Promise<void> {
+        this.initialization ??= this.initialize(entry_script, init_timeout_ms);
+        return this.initialization;
+    }
+
+    private async initialize(entry_script: string = null, init_timeout_ms = 60000): Promise<void> {
         if (!this._python) {
             this._python = await PythonExtension.api();
             await this._python.ready;
@@ -30,6 +36,10 @@ export class KernelSelector {
         this.init_timeout_ms = init_timeout_ms;
     }
 
+    private async waitForInitialization(): Promise<void> {
+        if (this.initialization) await this.initialization;
+    }
+
     private async listEnvs(): Promise<ResolvedEnvironment[]> {
         await this._python.environments.refreshEnvironments();
         const environments = await Promise.all(this._python.environments.known.map(environment =>
@@ -39,6 +49,7 @@ export class KernelSelector {
     }
 
     async resolveKernel(notebook: vscode.NotebookDocument) {
+        await this.waitForInitialization();
         const nbId = getResourceId(notebook.uri);
 
         if (nbId in this.kernelMap) {
@@ -68,6 +79,7 @@ export class KernelSelector {
     }
 
     async selectEnvironment(notebook: vscode.NotebookDocument): Promise<void> {
+        await this.waitForInitialization();
         if (!this._python) {
             this._python = await PythonExtension.api();
             await this._python.ready;

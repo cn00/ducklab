@@ -5,6 +5,46 @@ import { TableColumn } from './tableQuery';
 const RESULT_MARKER = '__DUCKLAB_TABLE_JSON__';
 export const PANDAS_DATAFRAME_MIME_TYPE = 'application/vnd.ducklab.pandas-dataframe+json';
 
+export function pandasDataFrameFormatterCode(enabled: boolean): string {
+    if (!enabled) return '';
+    return `
+try:
+    import pandas as _ducklab_pandas
+    from IPython import get_ipython as _ducklab_get_ipython
+    def _ducklab_format_pandas_dataframe(_ducklab_dataframe):
+        try:
+            import uuid as _ducklab_uuid
+            _ducklab_table_name = "__ducklab_dataframe_" + _ducklab_uuid.uuid4().hex
+            db.register(_ducklab_table_name, _ducklab_dataframe)
+            return {"tableName": _ducklab_table_name}
+        except Exception:
+            return None
+    _ducklab_shell = _ducklab_get_ipython()
+    if _ducklab_shell is not None:
+        _ducklab_shell.display_formatter.formatters['${PANDAS_DATAFRAME_MIME_TYPE}'].for_type(
+            _ducklab_pandas.DataFrame, _ducklab_format_pandas_dataframe)
+        if not getattr(_ducklab_pandas.DataFrame, '_ducklab_interactive_formatter_installed', False):
+            _ducklab_original_mimebundle = getattr(_ducklab_pandas.DataFrame, '_repr_mimebundle_', None)
+            def _ducklab_dataframe_mimebundle(_ducklab_dataframe, include=None, exclude=None):
+                _ducklab_payload = _ducklab_format_pandas_dataframe(_ducklab_dataframe)
+                if _ducklab_payload is not None:
+                    return {'${PANDAS_DATAFRAME_MIME_TYPE}': _ducklab_payload}
+                if _ducklab_original_mimebundle is not None:
+                    try:
+                        return _ducklab_original_mimebundle(_ducklab_dataframe, include=include, exclude=exclude)
+                    except TypeError:
+                        return _ducklab_original_mimebundle(_ducklab_dataframe)
+                return None
+            _ducklab_pandas.DataFrame._repr_mimebundle_ = _ducklab_dataframe_mimebundle
+            _ducklab_pandas.DataFrame._ducklab_interactive_formatter_installed = True
+        print('__DUCKLAB_PANDAS_FORMATTER__: registered MIME bundle hook')
+    else:
+        print('__DUCKLAB_PANDAS_FORMATTER__: IPython shell unavailable')
+except Exception as _ducklab_formatter_error:
+    print('__DUCKLAB_PANDAS_FORMATTER__: failed: ' + repr(_ducklab_formatter_error))
+`;
+}
+
 export function registeredPandasDataFrameName(data: unknown): string | undefined {
     const payload = typeof data === 'string'
         ? (() => { try { return JSON.parse(data); } catch { return undefined; } })()
