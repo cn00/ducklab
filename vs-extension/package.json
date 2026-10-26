@@ -59,6 +59,12 @@
           "default": false,
           "scope": "application",
           "markdownDescription": "Allow loading unsigned DuckDB extensions in SQL Only, Python/SQL, and PySpark/SQL kernels (equivalent to DuckDB CLI `-unsigned`). Unsigned extensions execute native code; enable only for extensions you trust. Reload the VS Code window after changing this setting."
+        },
+        "ducklab.renderPandasDataframes": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "Render Pandas DataFrame outputs in Python/SQL and PySpark/SQL cells with Ducklab's interactive table. Disable to retain Pandas' standard HTML rendering. Restart the selected Python kernel after changing this setting."
         }
       }
     },

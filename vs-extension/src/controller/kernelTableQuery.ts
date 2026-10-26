@@ -3,6 +3,17 @@ import { MessageType } from './messaging';
 import { TableColumn } from './tableQuery';
 
 const RESULT_MARKER = '__DUCKLAB_TABLE_JSON__';
+export const PANDAS_DATAFRAME_MIME_TYPE = 'application/vnd.ducklab.pandas-dataframe+json';
+
+export function registeredPandasDataFrameName(data: unknown): string | undefined {
+    const payload = typeof data === 'string'
+        ? (() => { try { return JSON.parse(data); } catch { return undefined; } })()
+        : data;
+    const tableName = (payload as { tableName?: unknown } | undefined)?.tableName;
+    return typeof tableName === 'string' && /^__ducklab_dataframe_[0-9a-f]{32}$/i.test(tableName)
+        ? tableName
+        : undefined;
+}
 
 export interface KernelTableResult {
     columns: TableColumn[];
@@ -20,7 +31,7 @@ export async function executeKernelJson(kernel: IRunningKernel, code: string): P
                 return;
             }
             if (event.msgType === MessageType.Output && event.content.contentType === 'text/plain') {
-                output += event.content.data;
+                output += String(event.content.data);
                 const markerIndex = output.indexOf(RESULT_MARKER);
                 if (markerIndex >= 0) {
                     const json = output.slice(markerIndex + RESULT_MARKER.length).trim();

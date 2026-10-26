@@ -11,8 +11,8 @@ import { IControllerOpts } from '../IControllerOpts';
 import { getResourceId } from '../utils';
 import { expandNotebookSql } from '../notebookSqlEnvironment';
 import { errorMessage, redactSecrets } from '../sqlEnvironment';
-import { createPagedTableResult, TABLE_MIME_TYPE, TableQueryRegistry } from '../tableQuery';
-import { executePythonQuery } from '../kernelTableQuery';
+import { createPagedTableResult, quoteSqlIdentifier, TABLE_MIME_TYPE, TableQueryRegistry } from '../tableQuery';
+import { executePythonQuery, PANDAS_DATAFRAME_MIME_TYPE, registeredPandasDataFrameName } from '../kernelTableQuery';
 
 
 export class DucklabPythonController implements IDisposable {
@@ -58,9 +58,28 @@ export class DucklabPythonController implements IDisposable {
             // json stringify to escape the string
             const allowUnsignedExtensions = vscode.workspace.getConfiguration('ducklab')
                 .get<boolean>('allowUnsignedExtensions', false);
+            const renderPandasDataframes = vscode.workspace.getConfiguration('ducklab')
+                .get<boolean>('renderPandasDataframes', true);
             void this.kSelector.init(`
                 import duckdb
                 db = duckdb.connect(r'${path.join(opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
+${renderPandasDataframes ? `
+                try:
+                    import pandas as _ducklab_pandas
+                    from IPython import get_ipython as _ducklab_get_ipython
+                    def _ducklab_format_pandas_dataframe(_ducklab_dataframe):
+                        try:
+                            import uuid as _ducklab_uuid
+                            _ducklab_table_name = "__ducklab_dataframe_" + _ducklab_uuid.uuid4().hex
+                            db.register(_ducklab_table_name, _ducklab_dataframe)
+                            return {"tableName": _ducklab_table_name}
+                        except Exception:
+                            return None
+                    _ducklab_get_ipython().display_formatter.formatters['${PANDAS_DATAFRAME_MIME_TYPE}'].for_type(
+                        _ducklab_pandas.DataFrame, _ducklab_format_pandas_dataframe)
+                except Exception:
+                    pass
+` : ''}
             `, 60000).catch(error => {
                 this.output.appendLine(`[Python/SQL] Python extension initialization failed: ${errorMessage(error)}`);
             });
@@ -233,14 +252,28 @@ export class DucklabPythonController implements IDisposable {
                 if (event.msgType === MessageType.Output) {
                     const msg = (event as OutputMessage);
 
+                    if (msg.content.contentType === PANDAS_DATAFRAME_MIME_TYPE) {
+                        const tableName = registeredPandasDataFrameName(msg.content.data);
+                        if (tableName) {
+                            const tableData = await createPagedTableResult(`SELECT * FROM ${quoteSqlIdentifier(tableName)}`,
+                                sql => executePythonQuery(kernel, sql), this.tableQueries, notebookUri, cell.document.uri.toString(),
+                                message => redactSecrets(message, secrets));
+                            if (tableData) {
+                                await currExecution.replaceOutput([new vscode.NotebookCellOutput([
+                                    vscode.NotebookCellOutputItem.text(JSON.stringify(tableData), TABLE_MIME_TYPE)
+                                ])]);
+                                return;
+                            }
+                        }
+                    }
                     if (msg.content.contentType === "text/html") {
                         await currExecution.appendOutput(new vscode.NotebookCellOutput([
-                            vscode.NotebookCellOutputItem.text(msg.content.data, msg.content.contentType)
+                            vscode.NotebookCellOutputItem.text(String(msg.content.data), msg.content.contentType)
                         ]));
                     }
                     else {
                         await currExecution.appendOutputItems([
-                            vscode.NotebookCellOutputItem.stdout(msg.content.data)
+                            vscode.NotebookCellOutputItem.stdout(String(msg.content.data))
                         ], output);
                     }
                 }
