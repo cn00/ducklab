@@ -1,4 +1,4 @@
-onlyBuiltDependencies:
-  - '@vscode/vsce-sign'
-  - keytar
-  - zeromq
+allowBuilds:
+  '@vscode/vsce-sign': true
+  keytar: true
+  zeromq: true
