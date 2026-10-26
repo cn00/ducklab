@@ -137,18 +137,23 @@ export class PythonKernel implements IRunningKernel {
             console.log("Init code: ", code);
             let res = await this.execute(code);
             let results: IKernelMessage[] = [];
+            let executionError: IKernelMessage | undefined;
             res.on(ev => {
                 console.log("Init response: ", ev);
                 results.push(ev);
+                if (ev.msgType === MessageType.Error) executionError = ev;
             });
             let interval = setTimeout(() => {
                 unsub();
                 return reject(Error("Timeout: Did not receive any response from kernel"));
             }, timeout_ms);
             const unsub = res.onDispose(code => {
-                if (code) {
+                if (code || executionError) {
                     clearTimeout(interval);
-                    return reject(Error("Failed: " + results));
+                    const detail = executionError
+                        ? String((executionError.content as ErrorMessage['content']).traceback ?? (executionError.content as ErrorMessage['content']).evalue)
+                        : String(results);
+                    return reject(Error("Failed: " + detail));
                 }
                 else {
                     clearTimeout(interval);
@@ -198,11 +203,10 @@ export class PythonKernel implements IRunningKernel {
             else {
                 console.log("Unknown Message: ", res);
             }
-            if (res.header.msg_type === "error") {
-                unsub();  // execution completed, no need to listen more events
-                emitter.dispose();
-            }
-            else if (res.header.msg_type === "execute_reply") {
+            // The shell execute_reply can arrive before IOPub stream/display_data
+            // messages. Dispose only after IOPub reports idle, otherwise output from
+            // initialization and rich display bundles is lost.
+            if (res.header.msg_type === "status" && res.content.execution_state === "idle") {
                 unsub();  // execution completed, no need to listen more events
                 emitter.dispose();
             }

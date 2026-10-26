@@ -16,6 +16,7 @@ export interface ErrorContent {
 export interface OutputContent {
     data: unknown;
     contentType: string;
+    mimeTypes?: string[];
 }
 
 export interface IKernelMessage<M extends MessageType = any, C extends KernelMessageContent = any> {
@@ -74,7 +75,8 @@ export function transformKnownMessage(msg: JupyterMessage) {
             parentMsgId: msg.parent_header.msg_id,
             content: {
                 contentType: type,
-                data: data
+                data: data,
+                mimeTypes: Object.keys(msg.content.data ?? {})
             }
         } as OutputMessage;
     }

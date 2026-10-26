@@ -12,7 +12,7 @@ import { getResourceId } from '../utils';
 import { expandNotebookSql } from '../notebookSqlEnvironment';
 import { errorMessage, redactSecrets } from '../sqlEnvironment';
 import { createPagedTableResult, quoteSqlIdentifier, TABLE_MIME_TYPE, TableQueryRegistry } from '../tableQuery';
-import { executePythonQuery, pandasDataFrameFormatterCode, PANDAS_DATAFRAME_MIME_TYPE, registeredPandasDataFrameName } from '../kernelTableQuery';
+import { executePythonQuery, indentPython, pandasDataFrameFormatterCode, PANDAS_DATAFRAME_MIME_TYPE, registeredPandasDataFrameName } from '../kernelTableQuery';
 
 
 export class DucklabPythonController implements IDisposable {
@@ -50,7 +50,7 @@ export class DucklabPythonController implements IDisposable {
             this._controller.supportedLanguages = this.supportedLanguages;
 
             this._controller.onDidChangeSelectedNotebooks(({ notebook, selected }) => {
-                console.log("NotebookSelection: ", selected, notebook);
+                if (selected) void this.warmKernel(notebook);
             });
 
             vscode.workspace.onDidCloseNotebookDocument(nb => this.onNotebookClose(nb));
@@ -63,9 +63,13 @@ export class DucklabPythonController implements IDisposable {
             void this.kSelector.init(`
                 import duckdb
                 db = duckdb.connect(r'${path.join(opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
-${pandasDataFrameFormatterCode(renderPandasDataframes)}
+                print('__DUCKLAB_DB__: initialized')
+${indentPython(pandasDataFrameFormatterCode(renderPandasDataframes), 16)}
             `, 60000).catch(error => {
                 this.output.appendLine(`[Python/SQL] Python extension initialization failed: ${errorMessage(error)}`);
+            });
+            this.kSelector.initializationOutput.on(message => {
+                this.output.appendLine(`[Python/SQL] Kernel initialization: ${message.trim()}`);
             });
         }
         catch (e) {
@@ -90,6 +94,16 @@ ${pandasDataFrameFormatterCode(renderPandasDataframes)}
         await this.kSelector.selectEnvironment(notebook);
     }
 
+    private async warmKernel(notebook: vscode.NotebookDocument): Promise<void> {
+        try {
+            this.output.appendLine(`[Python/SQL] Preparing kernel for ${notebook.uri.toString()}`);
+            await this.kSelector.resolveKernel(notebook);
+            this.output.appendLine('[Python/SQL] Kernel is ready.');
+        } catch (error) {
+            this.output.appendLine(`[Python/SQL] Kernel preparation failed: ${errorMessage(error)}`);
+        }
+    }
+
     async executeHandler(cells: vscode.NotebookCell[], notebook: vscode.NotebookDocument, controller: vscode.NotebookController) {
         const executions = new Map<vscode.NotebookCell, vscode.NotebookCellExecution>();
         for (const cell of cells) {
@@ -103,7 +117,7 @@ ${pandasDataFrameFormatterCode(renderPandasDataframes)}
             executions.set(cell, execution);
         }
         try {
-            this.output.appendLine(`[Python/SQL] Starting kernel for ${notebook.uri.toString()}`);
+            this.output.appendLine(`[Python/SQL] Resolving kernel for ${notebook.uri.toString()}`);
             let kernel = await this.kSelector.resolveKernel(notebook);
             await this.configureWorkingDirectory(kernel, notebook);
             for (let cell of cells) {
@@ -120,7 +134,15 @@ ${pandasDataFrameFormatterCode(renderPandasDataframes)}
             ? path.dirname(notebook.uri.fsPath)
             : this.opts.workingDir;
         const escapedWorkingDir = JSON.stringify(workingDir);
-        await kernel.executeSync(`import os\nos.chdir(${escapedWorkingDir})\ndb.execute('set file_search_path=' + repr(${escapedWorkingDir}))`, 60000);
+        const databasePath = JSON.stringify(path.join(this.opts.tempPath, this.id) + '.duckdb');
+        const allowUnsignedExtensions = vscode.workspace.getConfiguration('ducklab')
+            .get<boolean>('allowUnsignedExtensions', false);
+        const responses = await kernel.executeSync(`import os\nimport duckdb\nif 'db' not in globals():\n    db = duckdb.connect(${databasePath}, config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})\n    print('__DUCKLAB_DB__: recovered')\nos.chdir(${escapedWorkingDir})\ndb.execute('set file_search_path=' + repr(${escapedWorkingDir}))`, 60000);
+        for (const response of responses) {
+            if (response.msgType === MessageType.Output && String(response.content.data).includes('__DUCKLAB_DB__: recovered')) {
+                this.output.appendLine('[Python/SQL] Recreated missing global db connection.');
+            }
+        }
     }
 
     private async reportKernelStartFailure(cells: vscode.NotebookCell[], error: unknown,
@@ -193,6 +215,7 @@ ${pandasDataFrameFormatterCode(renderPandasDataframes)}
         this.tableQueries.removeCell(notebookUri, cell.document.uri.toString());
         let failed = false;
         let secrets: string[] = [];
+        let pandasDataFrameTableName: string | undefined;
         const currExecution = existingExecution ?? this._controller.createNotebookCellExecution(cell);
 
         if (!existingExecution) {
@@ -235,23 +258,16 @@ ${pandasDataFrameFormatterCode(renderPandasDataframes)}
             resEmitter.on(async (event) => {
                 if (event.msgType === MessageType.Output) {
                     const msg = (event as OutputMessage);
-                    this.output.appendLine(`[Python/SQL] Display MIME: ${msg.content.contentType}`);
+                    this.output.appendLine(`[Python/SQL] Display MIME: ${msg.content.contentType}; available: ${(msg.content.mimeTypes ?? []).join(', ')}`);
 
                     if (msg.content.contentType === PANDAS_DATAFRAME_MIME_TYPE) {
                         const tableName = registeredPandasDataFrameName(msg.content.data);
                         this.output.appendLine(`[Python/SQL] Pandas dataframe MIME ${tableName ? `received for ${tableName}` : 'had an invalid payload'}.`);
                         if (tableName) {
-                            const tableData = await createPagedTableResult(`SELECT * FROM ${quoteSqlIdentifier(tableName)}`,
-                                sql => executePythonQuery(kernel, sql), this.tableQueries, notebookUri, cell.document.uri.toString(),
-                                message => redactSecrets(message, secrets));
-                            if (tableData) {
-                                this.output.appendLine('[Python/SQL] Rendered Pandas dataframe with the Ducklab interactive table.');
-                                await currExecution.replaceOutput([new vscode.NotebookCellOutput([
-                                    vscode.NotebookCellOutputItem.text(JSON.stringify(tableData), TABLE_MIME_TYPE)
-                                ])]);
-                                return;
-                            }
-                            this.output.appendLine('[Python/SQL] Pandas dataframe table probe returned no columns; falling back to the regular output.');
+                            // The outer cell is still executing. Running the table
+                            // probe now would nest an execute request in IOPub output.
+                            pandasDataFrameTableName = tableName;
+                            return;
                         }
                     }
                     if (msg.content.contentType === "text/html") {
@@ -275,9 +291,32 @@ ${pandasDataFrameFormatterCode(renderPandasDataframes)}
                     ]));
                 }
             });
-            resEmitter.onDispose(code => {
+            resEmitter.onDispose(async code => {
                 if (code !== 0) failed = true;
                 console.log("Response emitter Disposed: ", cell.index);
+                // Let the IOPub idle message finish dispatching before issuing a
+                // follow-up request on the same kernel connection.
+                await new Promise<void>(resolve => setTimeout(resolve, 0));
+                if (!failed && pandasDataFrameTableName) {
+                    try {
+                        this.output.appendLine('[Python/SQL] Probing Pandas dataframe for the interactive table.');
+                        const tableData = await createPagedTableResult(`SELECT * FROM ${quoteSqlIdentifier(pandasDataFrameTableName)}`,
+                            sql => executePythonQuery(kernel, sql), this.tableQueries, notebookUri, cell.document.uri.toString(),
+                            message => redactSecrets(message, secrets));
+                        if (!tableData) throw new Error('Pandas dataframe table probe returned no columns.');
+                        this.output.appendLine('[Python/SQL] Rendered Pandas dataframe with the Ducklab interactive table.');
+                        await currExecution.replaceOutput([new vscode.NotebookCellOutput([
+                            vscode.NotebookCellOutputItem.text(JSON.stringify(tableData), TABLE_MIME_TYPE)
+                        ])]);
+                    } catch (error) {
+                        failed = true;
+                        const message = redactSecrets(errorMessage(error), secrets);
+                        this.output.appendLine(`[Python/SQL] Could not render Pandas dataframe: ${message}`);
+                        await currExecution.replaceOutput([new vscode.NotebookCellOutput([
+                            vscode.NotebookCellOutputItem.stderr(`Could not render Pandas dataframe: ${message}\r\n`)
+                        ])]);
+                    }
+                }
                 currExecution.end(!failed, Date.now());
             });
         }

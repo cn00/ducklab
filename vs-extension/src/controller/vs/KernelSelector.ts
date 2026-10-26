@@ -3,7 +3,9 @@ import * as vscode from "vscode";
 import path from 'path';
 import { KernelManager } from '../python/KernelManager';
 import { IKernelSpec, KernelType } from '../python/IKernelSpec';
-import { KernelStatus } from '../IRunningKernel';
+import { IRunningKernel, KernelStatus } from '../IRunningKernel';
+import { MessageType } from '../messaging';
+import { TypedEmitter } from '../TypedEmitter';
 import { getResourceId } from '../utils';
 
 
@@ -11,7 +13,9 @@ export class KernelSelector {
 
     private _python: PythonExtension;
     readonly kernelManager = new KernelManager();
+    readonly initializationOutput = new TypedEmitter<string>();
     private kernelMap: { [nbId: string]: string; } = {};
+    private kernelStarts: { [nbId: string]: Promise<IRunningKernel>; } = {};
     private entry_script: string;
     private init_timeout_ms: number;
     private initialization: Promise<void> | undefined;
@@ -60,6 +64,17 @@ export class KernelSelector {
             delete this.kernelMap[nbId];
             if (kernel) this.kernelManager.kill(kernel.id);
         }
+        if (this.kernelStarts[nbId]) return this.kernelStarts[nbId];
+        const start = this.startKernel(notebook);
+        this.kernelStarts[nbId] = start;
+        try {
+            return await start;
+        } finally {
+            delete this.kernelStarts[nbId];
+        }
+    }
+
+    private async startKernel(notebook: vscode.NotebookDocument): Promise<IRunningKernel> {
         if (!this._python) {
             this._python = await PythonExtension.api();
             await this._python.ready;
@@ -74,8 +89,7 @@ export class KernelSelector {
             spec = this.fromEnvToSpec(env);
         }
         if (!spec) throw new Error('No Python environment selected for this notebook.');
-        let kernel = await this.attachKernel(notebook, spec);
-        return kernel;
+        return this.attachKernel(notebook, spec);
     }
 
     async selectEnvironment(notebook: vscode.NotebookDocument): Promise<void> {
@@ -155,7 +169,7 @@ export class KernelSelector {
         };
     }
 
-    private async attachKernel(notebook: vscode.NotebookDocument, spec: IKernelSpec) {
+    private async attachKernel(notebook: vscode.NotebookDocument, spec: IKernelSpec): Promise<IRunningKernel> {
         const nbId = getResourceId(notebook.uri);
 
         let paths = Object.keys(this.kernelMap).filter(k => k === nbId);
@@ -165,15 +179,26 @@ export class KernelSelector {
         }
         let kernel = await this.kernelManager.launchKernel(spec);
         this.kernelMap[nbId] = kernel.id;
-        await kernel.waitReady(this.init_timeout_ms);
-        console.log("Init: ", this);
-        if (this.entry_script) {
-            console.log("Init entry_scirpt: ", this.entry_script);
-            let res = await kernel.executeSync(this.entry_script, this.init_timeout_ms);
-            console.log("init response: ", res);
+        try {
+            await kernel.waitReady(this.init_timeout_ms);
+            console.log("Init: ", this);
+            if (this.entry_script) {
+                console.log("Init entry_scirpt: ", this.entry_script);
+                const responses = await kernel.executeSync(this.entry_script, this.init_timeout_ms);
+                for (const response of responses) {
+                    if (response.msgType === MessageType.Output) {
+                        this.initializationOutput.emit(String(response.content.data));
+                    }
+                }
+                console.log("init response: ", responses);
+            }
+            console.log("Kernel Ready: ", kernel.status, kernel);
+            return kernel;
+        } catch (error) {
+            this.kernelManager.kill(kernel.id);
+            delete this.kernelMap[nbId];
+            throw error;
         }
-        console.log("Kernel Ready: ", kernel.status, kernel);
-        return kernel;
     }
 
     public async getAttachedKernel(notebook: vscode.NotebookDocument) {

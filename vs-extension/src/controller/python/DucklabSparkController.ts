@@ -11,7 +11,7 @@ import { IControllerOpts } from '../IControllerOpts';
 import { expandNotebookSql } from '../notebookSqlEnvironment';
 import { errorMessage, redactSecrets } from '../sqlEnvironment';
 import { createPagedTableResult, quoteSqlIdentifier, TABLE_MIME_TYPE, TableQueryRegistry } from '../tableQuery';
-import { executePythonQuery, executeSparkQuery, pandasDataFrameFormatterCode, PANDAS_DATAFRAME_MIME_TYPE, registeredPandasDataFrameName } from '../kernelTableQuery';
+import { executePythonQuery, executeSparkQuery, indentPython, pandasDataFrameFormatterCode, PANDAS_DATAFRAME_MIME_TYPE, registeredPandasDataFrameName } from '../kernelTableQuery';
 
 
 export class DucklabSparkController implements IDisposable {
@@ -68,7 +68,8 @@ export class DucklabSparkController implements IDisposable {
             this.kSelector.init(`
                 import duckdb
                 db = duckdb.connect(r'${path.join(this.opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
-${pandasDataFrameFormatterCode(renderPandasDataframes)}
+                print('__DUCKLAB_DB__: initialized')
+${indentPython(pandasDataFrameFormatterCode(renderPandasDataframes), 16)}
                 
                 # import os
                 # import sys
@@ -116,7 +117,10 @@ ${sparkInitialization}
             ? path.dirname(notebook.uri.fsPath)
             : this.opts.workingDir;
         const escapedWorkingDir = JSON.stringify(workingDir);
-        await kernel.executeSync(`import os\nos.chdir(${escapedWorkingDir})\ndb.execute('set file_search_path=' + repr(${escapedWorkingDir}))`, 60000);
+        const databasePath = JSON.stringify(path.join(this.opts.tempPath, this.id) + '.duckdb');
+        const allowUnsignedExtensions = vscode.workspace.getConfiguration('ducklab')
+            .get<boolean>('allowUnsignedExtensions', false);
+        await kernel.executeSync(`import os\nimport duckdb\nif 'db' not in globals():\n    db = duckdb.connect(${databasePath}, config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})\nos.chdir(${escapedWorkingDir})\ndb.execute('set file_search_path=' + repr(${escapedWorkingDir}))`, 60000);
     }
 
     dispose(): void {
@@ -168,6 +172,7 @@ ${sparkInitialization}
         this.tableQueries.removeCell(notebookUri, cell.document.uri.toString());
         let failed = false;
         let secrets: string[] = [];
+        let pandasDataFrameTableName: string | undefined;
         let currExecution = this._controller.createNotebookCellExecution(cell);
 
         currExecution.executionOrder = ++this._executionOrder;
@@ -212,15 +217,8 @@ ${sparkInitialization}
                     if (msg.content.contentType === PANDAS_DATAFRAME_MIME_TYPE) {
                         const tableName = registeredPandasDataFrameName(msg.content.data);
                         if (tableName) {
-                            const tableData = await createPagedTableResult(`SELECT * FROM ${quoteSqlIdentifier(tableName)}`,
-                                sql => executePythonQuery(kernel, sql), this.tableQueries, notebookUri, cell.document.uri.toString(),
-                                message => redactSecrets(message, secrets));
-                            if (tableData) {
-                                await currExecution.replaceOutput([new vscode.NotebookCellOutput([
-                                    vscode.NotebookCellOutputItem.text(JSON.stringify(tableData), TABLE_MIME_TYPE)
-                                ])]);
-                                return;
-                            }
+                            pandasDataFrameTableName = tableName;
+                            return;
                         }
                     }
                     if (msg.content.contentType === "text/html") {
@@ -243,9 +241,27 @@ ${sparkInitialization}
                     ]));
                 }
             });
-            resEmitter.onDispose(code => {
+            resEmitter.onDispose(async code => {
                 if (code !== 0) failed = true;
                 console.log("Response emitter Disposed: ", cell.index);
+                await new Promise<void>(resolve => setTimeout(resolve, 0));
+                if (!failed && pandasDataFrameTableName) {
+                    try {
+                        const tableData = await createPagedTableResult(`SELECT * FROM ${quoteSqlIdentifier(pandasDataFrameTableName)}`,
+                            sql => executePythonQuery(kernel, sql), this.tableQueries, notebookUri, cell.document.uri.toString(),
+                            message => redactSecrets(message, secrets));
+                        if (!tableData) throw new Error('Pandas dataframe table probe returned no columns.');
+                        await currExecution.replaceOutput([new vscode.NotebookCellOutput([
+                            vscode.NotebookCellOutputItem.text(JSON.stringify(tableData), TABLE_MIME_TYPE)
+                        ])]);
+                    } catch (error) {
+                        failed = true;
+                        const message = redactSecrets(errorMessage(error), secrets);
+                        await currExecution.replaceOutput([new vscode.NotebookCellOutput([
+                            vscode.NotebookCellOutputItem.stderr(`Could not render Pandas dataframe: ${message}\r\n`)
+                        ])]);
+                    }
+                }
                 currExecution.end(!failed, Date.now());
             });
         }
