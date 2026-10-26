@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { DuckdbDataSource } from './DuckdbDataSource';
 import { IControllerOpts } from '../IControllerOpts';
 import path from "path";
+import { createHash } from 'crypto';
 import { homedir } from 'os';
 import { getResourceId } from '../utils';
 import { expandNotebookSql } from '../notebookSqlEnvironment';
@@ -65,6 +66,8 @@ export class DucklabSQLController {
             const workingDir = notebook.uri.scheme === 'file'
                 ? path.dirname(notebook.uri.fsPath)
                 : this.opts.workingDir;
+            // const databaseId = createHash('sha256').update(notebook.uri.toString()).digest('hex');
+            const dbPath = path.join(homedir(), ".ducklab", `${nbId}.duckdb`);
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: "Initializing Kernel...",
@@ -75,11 +78,17 @@ export class DucklabSQLController {
                     allowUnsignedExtensions: vscode.workspace.getConfiguration('ducklab')
                         .get<boolean>('allowUnsignedExtensions', false),
                     dataSearchPath: workingDir,
-                    dbPath: path.join(homedir(), ".ducklab", nbId + ".db")
+                    dbPath
                 });
-                await this.kernels[nbId].connect();
-                progress.report({ message: "Loading Default Extensions..." });
-                await this.kernels[nbId].loadExtensions();
+                try {
+                    await this.kernels[nbId].connect();
+                    progress.report({ message: "Loading Default Extensions..." });
+                    await this.kernels[nbId].loadExtensions();
+                } catch (error) {
+                    this.kernels[nbId].dispose();
+                    delete this.kernels[nbId];
+                    throw new Error(`Failed to initialize DuckDB database at "${dbPath}": ${error instanceof Error ? error.message : String(error)}`);
+                }
             });
         }
         return this.kernels[nbId];

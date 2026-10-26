@@ -27,7 +27,7 @@ const styles = `
 .ducklab-column-actions { position:absolute; top:2px; right:4px; z-index:2; }
 .ducklab-column-actions > summary { list-style:none; cursor:pointer; padding:0 3px; color:var(--vscode-textLink-foreground); }
 .ducklab-column-actions > summary::-webkit-details-marker { display:none; }
-.ducklab-column-actions-panel { position:fixed; z-index:10000; min-width:190px; max-height:calc(100vh - 16px); overflow:auto; padding:4px; background:var(--vscode-menu-background); color:var(--vscode-menu-foreground); border:1px solid var(--vscode-menu-border); border-radius:4px; box-shadow:0 4px 14px #0005; font-weight:normal; }
+.ducklab-column-actions-panel { position:fixed; z-index:10000; box-sizing:border-box; min-width:190px; max-height:calc(100vh - 16px); overflow:auto; padding:4px; background:var(--vscode-menu-background); color:var(--vscode-menu-foreground); border:1px solid var(--vscode-menu-border); border-radius:4px; box-shadow:0 4px 14px #0005; font-weight:normal; }
 .ducklab-column-actions-panel button,.ducklab-column-actions-panel summary { display:block; width:100%; box-sizing:border-box; padding:6px 8px; border:0; background:transparent; color:inherit; text-align:left; white-space:nowrap; cursor:pointer; }
 .ducklab-column-actions-panel button:hover,.ducklab-column-actions-panel summary:hover { background:var(--vscode-list-hoverBackground); }
 .ducklab-column-actions-panel input[type=search] { width:100%; box-sizing:border-box; padding:5px; color:var(--vscode-input-foreground); background:var(--vscode-input-background); border:1px solid var(--vscode-input-border); }
@@ -476,14 +476,16 @@ function renderTable(data: TableData, root: HTMLElement, signal: AbortSignal, co
             const bounds = summary.getBoundingClientRect();
             const shellBounds = shell.getBoundingClientRect();
             const panelWidth = Math.max(190, panel.getBoundingClientRect().width);
-            panel.style.maxHeight = `${Math.max(120, Math.min(window.innerHeight - 16, shellBounds.height - 16))}px`;
+            const availableAbove = Math.max(0, bounds.bottom - shellBounds.top - 8);
+            const availableBelow = Math.max(0, shellBounds.bottom - bounds.top - 8);
+            panel.style.maxHeight = `${Math.max(availableAbove, availableBelow)}px`;
             const panelHeight = panel.getBoundingClientRect().height;
-            const availableAbove = bounds.bottom - shellBounds.top - 8;
-            const availableBelow = shellBounds.bottom - bounds.top - 8;
             const openUp = panelHeight > availableBelow && availableAbove > availableBelow;
-            const preferredTop = openUp ? bounds.bottom - panelHeight : Math.min(bounds.top, shellBounds.bottom - panelHeight - 8);
+            panel.style.maxHeight = `${openUp ? availableAbove : availableBelow}px`;
+            const fittedHeight = panel.getBoundingClientRect().height;
+            const preferredTop = openUp ? bounds.bottom - fittedHeight : bounds.top;
             panel.style.left = `${Math.max(8, Math.min(bounds.right + 6, window.innerWidth - panelWidth - 8))}px`;
-            panel.style.top = `${Math.max(shellBounds.top + 8, preferredTop)}px`;
+            panel.style.top = `${Math.max(shellBounds.top + 8, Math.min(preferredTop, shellBounds.bottom - fittedHeight - 8))}px`;
         }, { signal });
 
         const addAction = (label: string, callback: () => void) => {
