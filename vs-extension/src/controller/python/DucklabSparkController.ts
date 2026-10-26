@@ -66,7 +66,6 @@ export class DucklabSparkController implements IDisposable {
             this.kSelector.init(`
                 import duckdb
                 db = duckdb.connect(r'${path.join(this.opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
-                db.execute('set file_search_path=${JSON.stringify(opts.workingDir)};')
                 
                 # import os
                 # import sys
@@ -99,6 +98,7 @@ ${sparkInitialization}
     async executeHandler(cells: vscode.NotebookCell[], notebook: vscode.NotebookDocument, controller: vscode.NotebookController) {
         try {
             let kernel = await this.kSelector.resolveKernel(notebook);
+            await this.configureWorkingDirectory(kernel, notebook);
             for (let cell of cells) {
                 await this._doExecution(cell, kernel, notebook.uri);
             }
@@ -106,6 +106,14 @@ ${sparkInitialization}
         catch (err) {
             console.log("Failed: ", err);
         }
+    }
+
+    private async configureWorkingDirectory(kernel: IRunningKernel, notebook: vscode.NotebookDocument): Promise<void> {
+        const workingDir = notebook.uri.scheme === 'file'
+            ? path.dirname(notebook.uri.fsPath)
+            : this.opts.workingDir;
+        const escapedWorkingDir = JSON.stringify(workingDir);
+        await kernel.executeSync(`import os\nos.chdir(${escapedWorkingDir})\ndb.execute('set file_search_path=' + repr(${escapedWorkingDir}))`, 60000);
     }
 
     dispose(): void {

@@ -117,7 +117,7 @@ Single-query tabular results use backend pagination in the SQL Only, Python/SQL,
 1. Make sure python or Anaconda is installed.
 2. Create a new `.isql` file.
 3. Select kernel `Python/SQL`
-4. Select Python environment from bottom-right corner
+4. Click `Python Environment` in the notebook toolbar and select an interpreter. The selection panel marks the currently selected interpreter.
 5. `ducklab-python` kernel will have `db` variable (duckdb connection) already initialized for you.
 6. Run python or SQL code
 
@@ -126,7 +126,7 @@ Single-query tabular results use backend pagination in the SQL Only, Python/SQL,
 1. Make sure python or Anaconda is installed.
 2. Create a new `.isql` file.
 3. Select kernel `PySpark/SQL`
-4. Select Python environment from bottom-right corner
+4. Click `Python Environment` in the notebook toolbar and select an interpreter.
 5. `ducklab-spark` kernel will have `spark` variable (SparkSession) already initialized for you.
 6. Run spark code,
 

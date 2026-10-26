@@ -61,7 +61,6 @@ export class DucklabPythonController implements IDisposable {
             void this.kSelector.init(`
                 import duckdb
                 db = duckdb.connect(r'${path.join(opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
-                db.execute('set file_search_path=${JSON.stringify(opts.workingDir)};')
             `, 60000).catch(error => {
                 this.output.appendLine(`[Python/SQL] Python extension initialization failed: ${errorMessage(error)}`);
             });
@@ -103,6 +102,7 @@ export class DucklabPythonController implements IDisposable {
         try {
             this.output.appendLine(`[Python/SQL] Starting kernel for ${notebook.uri.toString()}`);
             let kernel = await this.kSelector.resolveKernel(notebook);
+            await this.configureWorkingDirectory(kernel, notebook);
             for (let cell of cells) {
                 await this._doExecution(cell, kernel, notebook.uri, executions.get(cell));
             }
@@ -110,6 +110,14 @@ export class DucklabPythonController implements IDisposable {
         catch (err) {
             await this.reportKernelStartFailure(cells, err, executions);
         }
+    }
+
+    private async configureWorkingDirectory(kernel: IRunningKernel, notebook: vscode.NotebookDocument): Promise<void> {
+        const workingDir = notebook.uri.scheme === 'file'
+            ? path.dirname(notebook.uri.fsPath)
+            : this.opts.workingDir;
+        const escapedWorkingDir = JSON.stringify(workingDir);
+        await kernel.executeSync(`import os\nos.chdir(${escapedWorkingDir})\ndb.execute('set file_search_path=' + repr(${escapedWorkingDir}))`, 60000);
     }
 
     private async reportKernelStartFailure(cells: vscode.NotebookCell[], error: unknown,

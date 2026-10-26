@@ -20,6 +20,7 @@ export interface IRunningKernel {
     status: KernelStatus;
     statusChanged: TypedEmitter<KernelStatus>;
     execute(code: string): Promise<TypedEmitter<IKernelMessage>>;
+    executeSync(code: string, timeout_ms: number): Promise<IKernelMessage[]>;
     interrupt(): Promise<void>;
     dispose(): void;
     waitReady(timeout_seconds: number): Promise<void>;
