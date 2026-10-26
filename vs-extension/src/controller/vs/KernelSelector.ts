@@ -1,5 +1,6 @@
 import { PythonExtension, ResolvedEnvironment } from '@vscode/python-extension';
 import * as vscode from "vscode";
+import path from 'path';
 import { KernelManager } from '../python/KernelManager';
 import { IKernelSpec, KernelType } from '../python/IKernelSpec';
 import { KernelStatus } from '../IRunningKernel';
@@ -29,10 +30,12 @@ export class KernelSelector {
         this.init_timeout_ms = init_timeout_ms;
     }
 
-    private async listEnvs() {
-        // await this._python.environments.refreshEnvironments();
-        console.log(this._python.environments.known);
-        return this._python.environments.known;
+    private async listEnvs(): Promise<ResolvedEnvironment[]> {
+        await this._python.environments.refreshEnvironments();
+        const environments = await Promise.all(this._python.environments.known.map(environment =>
+            this._python.environments.resolveEnvironment(environment)));
+        return environments.filter((environment): environment is ResolvedEnvironment =>
+            environment !== undefined && environment.executable.uri !== undefined);
     }
 
     async resolveKernel(notebook: vscode.NotebookDocument) {
@@ -40,13 +43,11 @@ export class KernelSelector {
 
         if (nbId in this.kernelMap) {
             const kernel = this.kernelManager.get(this.kernelMap[nbId]);
-            if (kernel.status !== KernelStatus.Killed) {
+            if (kernel && kernel.status !== KernelStatus.Killed) {
                 return kernel;
             }
-            else {
-                delete this.kernelMap[nbId];
-                this.kernelManager.kill(nbId);
-            }
+            delete this.kernelMap[nbId];
+            if (kernel) this.kernelManager.kill(kernel.id);
         }
         if (!this._python) {
             this._python = await PythonExtension.api();
@@ -61,20 +62,58 @@ export class KernelSelector {
         else {
             spec = this.fromEnvToSpec(env);
         }
+        if (!spec) throw new Error('No Python environment selected for this notebook.');
         let kernel = await this.attachKernel(notebook, spec);
         return kernel;
     }
 
+    async selectEnvironment(notebook: vscode.NotebookDocument): Promise<void> {
+        if (!this._python) {
+            this._python = await PythonExtension.api();
+            await this._python.ready;
+        }
+        const environments = await this.listEnvs();
+        if (!environments.length) {
+            throw new Error('No usable Python environments were found. Select an interpreter that has a Python executable.');
+        }
+
+        const activePath = this._python.environments.getActiveEnvironmentPath(notebook.uri);
+        const activeEnvironment = activePath
+            ? await this._python.environments.resolveEnvironment(activePath)
+            : undefined;
+        const items = environments.map(environment => {
+            const spec = this.fromEnvToSpec(environment);
+            return {
+                label: spec.label,
+                description: environment.id === activeEnvironment?.id ? 'Currently selected' : undefined,
+                detail: spec.path,
+                environment
+            };
+        });
+        const selected = await vscode.window.showQuickPick(items, {
+            canPickMany: false,
+            placeHolder: activeEnvironment
+                ? `Current: ${this.fromEnvToSpec(activeEnvironment).label}`
+                : 'Select Python environment for this notebook'
+        });
+        if (!selected) return;
+
+        await this._python.environments.updateActiveEnvironmentPath(selected.environment, notebook.uri);
+        await this.killAttachedKernel(notebook);
+        vscode.window.showInformationMessage(`Ducklab will use ${selected.label} when the next cell runs.`);
+    }
+
     public async requestKernelSelection(notebook: vscode.NotebookDocument) {
         let envs = await this.listEnvs();
-        let kernels = envs.map(this.fromEnvToSpec);
+        if (!envs.length) throw new Error('No usable Python environments were found. Select an interpreter that has a Python executable.');
+        let kernels = envs.map(env => this.fromEnvToSpec(env));
         let selectedSpec = await this.showPickup(kernels, "Select Python Kernel");
         console.log("Selected Spec: ", selectedSpec);
         if (!selectedSpec) {
             return;
         }
         await this._python.environments.updateActiveEnvironmentPath(
-            envs.filter(e => e.id === selectedSpec.id)[0],
+            envs.find(environment => environment.id === selectedSpec.id)!,
             notebook.uri
         );
         return selectedSpec;
@@ -90,13 +129,17 @@ export class KernelSelector {
     }
 
     public fromEnvToSpec(env: ResolvedEnvironment): IKernelSpec {
+        const pythonPath = env.executable.uri?.fsPath;
+        if (!pythonPath) throw new Error(`Python environment "${env.path}" has no executable.`);
+        const name = env.environment?.name ?? path.basename(pythonPath);
+        const version = env.version ?? { major: 0, minor: 0, micro: 0, release: undefined, sysVersion: '' };
         return {
             id: env.id,
-            label: `${env.environment.name} (${env.version.major}.${env.version.minor})`,
-            envType: env.environment.type,
+            label: `${name} (${version.major ? `${version.major}.${version.minor}` : 'unknown version'})`,
+            envType: env.environment?.type ?? 'Unknown',
             type: KernelType.IPYKERNEL,
-            path: env.path,
-            version: env.version
+            path: pythonPath,
+            version
         };
     }
 
@@ -135,20 +178,22 @@ export class KernelSelector {
         const nbId = getResourceId(notebook.uri);
         if (nbId in this.kernelMap) {
             this.kernelManager.kill(this.kernelMap[nbId]);
+            delete this.kernelMap[nbId];
         }
         return;
     }
 
     private listenEnvironmentChangeEvent() {
         this._python.environments.onDidChangeActiveEnvironmentPath(async (ev) => {
-            let activeNb = vscode.window.activeNotebookEditor.notebook;
+            const activeNb = vscode.window.activeNotebookEditor?.notebook;
+            if (!activeNb) return;
             console.log("Active env change event: ", ev, activeNb);
-            if (activeNb.uri.fsPath !== ev.resource.uri.fsPath) {
+            if (ev.resource && activeNb.uri.fsPath !== ev.resource.uri.fsPath) {
                 return;
             }
             let env = await this._python.environments.resolveEnvironment(ev.path);
-            let spec = this.fromEnvToSpec(env);
-            await this.attachKernel(activeNb, spec);
+            if (!env) return;
+            await this.killAttachedKernel(activeNb);
         });
     }
 

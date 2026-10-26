@@ -26,9 +26,22 @@ export function activate(context: vscode.ExtensionContext) {
         if (err) throw Error("Temp directory not accessible");
 
         try {
-            context.subscriptions.push(new DucklabPythonController({ tempPath: path, workingDir: base_path }, tableQueries));
+            const pythonController = new DucklabPythonController({ tempPath: path, workingDir: base_path }, tableQueries);
+            context.subscriptions.push(pythonController);
             context.subscriptions.push(new DucklabSparkController({ tempPath: path, workingDir: base_path }, tableQueries));
             context.subscriptions.push(new DucklabSQLController({ tempPath: path, workingDir: base_path }, tableQueries));
+            context.subscriptions.push(vscode.commands.registerCommand('ducklab.selectPythonEnvironment', async () => {
+                const notebook = vscode.window.activeNotebookEditor?.notebook;
+                if (!notebook || notebook.notebookType !== 'isql') {
+                    await vscode.window.showWarningMessage('Open an .isql notebook before selecting a Python environment.');
+                    return;
+                }
+                try {
+                    await pythonController.selectPythonEnvironment(notebook);
+                } catch (error) {
+                    await vscode.window.showErrorMessage(`Could not select a Python environment: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }));
         }
         catch (ex) {
             console.log("Failed: ", ex);

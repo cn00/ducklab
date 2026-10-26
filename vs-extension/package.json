@@ -34,7 +34,7 @@
   ],
   "extensionDependencies": [
     "vscode.sql",
-    "vscode.python"
+    "ms-python.python"
   ],
   "type": "commonjs",
   "main": "./out/index.js",
@@ -87,10 +87,22 @@
         "command": "ducklab.importDatabricksPy",
         "title": "Import Databricks Noteboook",
         "category": "DuckLab"
+      },
+      {
+        "command": "ducklab.selectPythonEnvironment",
+        "title": "Python Environment",
+        "category": "DuckLab",
+        "icon": "$(python)"
       }
     ],
     "menus": {
-      "notebook/toolbar": [],
+      "notebook/toolbar": [
+        {
+          "when": "notebookType == isql",
+          "command": "ducklab.selectPythonEnvironment",
+          "group": "navigation@1"
+        }
+      ],
       "explorer/context": [
         {
           "when": "resourceExtname == '.py'",

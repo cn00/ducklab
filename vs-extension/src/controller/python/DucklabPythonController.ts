@@ -32,6 +32,7 @@ export class DucklabPythonController implements IDisposable {
     private _executionOrder = 0;
     private kSelector = new KernelSelector();
     private readonly tableQueries: TableQueryRegistry;
+    private readonly output = vscode.window.createOutputChannel('Ducklab');
 
     constructor(opts: IControllerOpts, tableQueries: TableQueryRegistry) {
 
@@ -57,11 +58,13 @@ export class DucklabPythonController implements IDisposable {
             // json stringify to escape the string
             const allowUnsignedExtensions = vscode.workspace.getConfiguration('ducklab')
                 .get<boolean>('allowUnsignedExtensions', false);
-            this.kSelector.init(`
+            void this.kSelector.init(`
                 import duckdb
                 db = duckdb.connect(r'${path.join(opts.tempPath, this.id)}.duckdb', config={'allow_unsigned_extensions': '${allowUnsignedExtensions}'})
                 db.execute('set file_search_path=${JSON.stringify(opts.workingDir)};')
-            `, 60000);
+            `, 60000).catch(error => {
+                this.output.appendLine(`[Python/SQL] Python extension initialization failed: ${errorMessage(error)}`);
+            });
         }
         catch (e) {
             console.log(e);
@@ -81,21 +84,57 @@ export class DucklabPythonController implements IDisposable {
         await kernel.interrupt();
     }
 
+    async selectPythonEnvironment(notebook: vscode.NotebookDocument): Promise<void> {
+        await this.kSelector.selectEnvironment(notebook);
+    }
+
     async executeHandler(cells: vscode.NotebookCell[], notebook: vscode.NotebookDocument, controller: vscode.NotebookController) {
+        const executions = new Map<vscode.NotebookCell, vscode.NotebookCellExecution>();
+        for (const cell of cells) {
+            const execution = this._controller.createNotebookCellExecution(cell);
+            execution.executionOrder = ++this._executionOrder;
+            execution.start(Date.now());
+            await execution.clearOutput();
+            await execution.replaceOutput([new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.stdout('Starting Python/SQL kernel…\r\n')
+            ])]);
+            executions.set(cell, execution);
+        }
         try {
+            this.output.appendLine(`[Python/SQL] Starting kernel for ${notebook.uri.toString()}`);
             let kernel = await this.kSelector.resolveKernel(notebook);
             for (let cell of cells) {
-                await this._doExecution(cell, kernel, notebook.uri);
+                await this._doExecution(cell, kernel, notebook.uri, executions.get(cell));
             }
         }
         catch (err) {
-            console.log("Failed: ", err);
+            await this.reportKernelStartFailure(cells, err, executions);
         }
+    }
+
+    private async reportKernelStartFailure(cells: vscode.NotebookCell[], error: unknown,
+        executions = new Map<vscode.NotebookCell, vscode.NotebookCellExecution>()): Promise<void> {
+        const message = `Failed to start the Python/SQL kernel: ${errorMessage(error)}`;
+        console.error("[Ducklab]", message);
+        this.output.appendLine(`[Python/SQL] ${message}`);
+        await Promise.all(cells.map(async cell => {
+            const execution = executions.get(cell) ?? this._controller.createNotebookCellExecution(cell);
+            if (!executions.has(cell)) {
+                execution.executionOrder = ++this._executionOrder;
+                execution.start(Date.now());
+                await execution.clearOutput();
+            }
+            await execution.replaceOutput([new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.stderr(`${message}\r\n`)
+            ])]);
+            execution.end(false, Date.now());
+        }));
     }
 
     dispose(): void {
         this._controller.dispose();
         this.kSelector.dispose();
+        this.output.dispose();
     }
 
     private getRow(cols: IFieldInfo[], obj: any) {
@@ -138,14 +177,17 @@ export class DucklabPythonController implements IDisposable {
         return text;
     }
 
-    private async _doExecution(cell: vscode.NotebookCell, kernel: IRunningKernel, notebookUri: vscode.Uri): Promise<void> {
+    private async _doExecution(cell: vscode.NotebookCell, kernel: IRunningKernel, notebookUri: vscode.Uri,
+        existingExecution?: vscode.NotebookCellExecution): Promise<void> {
         this.tableQueries.removeCell(notebookUri, cell.document.uri.toString());
         let failed = false;
         let secrets: string[] = [];
-        let currExecution = this._controller.createNotebookCellExecution(cell);
+        const currExecution = existingExecution ?? this._controller.createNotebookCellExecution(cell);
 
-        currExecution.executionOrder = ++this._executionOrder;
-        currExecution.start(Date.now()); // Keep track of elapsed time to execute cell.
+        if (!existingExecution) {
+            currExecution.executionOrder = ++this._executionOrder;
+            currExecution.start(Date.now()); // Keep track of elapsed time to execute cell.
+        }
         await currExecution.clearOutput();
         let output = new vscode.NotebookCellOutput([]);
         await currExecution.replaceOutput(output);
