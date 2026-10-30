@@ -45,7 +45,7 @@ describe('kernel initialization script indentation', () => {
                 ''
             ].join(newline));
             await selector.resolveKernel({
-                uri: { fsPath: '/workspace/test.isql' }
+                uri: { fsPath: '/workspace/test.md' }
             } as vscode.NotebookDocument);
 
             expect(kernel.executeSync).toHaveBeenCalledWith(

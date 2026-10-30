@@ -1,7 +1,7 @@
-import { Notebook } from '@/notebook/Notebook';
-import { TabularDataset } from "@/entities/tabular/TabularDataset";
-import { ITabularResultSet } from "@/entities/tabular/ITabularResultSet";
-import { DataSourceUndefined } from '@/entities/exceptions';
+import { Notebook } from './Notebook';
+import { TabularDataset } from "../entities/tabular/TabularDataset";
+import { ITabularResultSet } from "../entities/tabular/ITabularResultSet";
+import { DataSourceUndefined } from '../entities/exceptions';
 
 
 export enum CellType {

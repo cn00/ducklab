@@ -11,9 +11,6 @@ importers:
       '@duckdb/duckdb-wasm':
         specifier: '1.29'
         version: 1.29.0
-      '@ducklab/core':
-        specifier: 0.3.19
-        version: 0.3.19
       '@mdi/font':
         specifier: 7.4.47
         version: 7.4.47
@@ -118,9 +115,6 @@ packages:
 
   '@duckdb/duckdb-wasm@1.29.0':
     resolution: {integrity: sha512-8Zq7vafQuIz9gklC/9375KE38UlkaS2n8+yvG+/JK7irm3DjwYNJHL4xfplIj0bSHFIg6we5XhWYFqtE/vO3+Q==}
-
-  '@ducklab/core@0.3.19':
-    resolution: {integrity: sha512-GlrEHY0dWXG7NULhBB/83x7YqqFjAHeyiL/+qcLe5SD7ICUDny5HSNdld+HyS4aVxrzJM7TrkIzCPHC5ZVaV+Q==}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -1570,8 +1564,6 @@ snapshots:
   '@duckdb/duckdb-wasm@1.29.0':
     dependencies:
       apache-arrow: 17.0.0
-
-  '@ducklab/core@0.3.19': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true

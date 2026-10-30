@@ -17,7 +17,7 @@ import { executePythonQuery, executeSparkQuery, indentPython, pandasDataFrameFor
 export class DucklabSparkController implements IDisposable {
 
     readonly id = 'ducklab-spark';
-    readonly notebookType = 'isql';
+    readonly notebookType = 'ducklab-markdown';
     readonly supportedLanguages = ['sql', 'markdown', 'plaintext', 'python'];
     readonly label: string = 'PySpark/SQL';
     readonly description?: string | undefined;

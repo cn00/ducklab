@@ -21,6 +21,7 @@ export default defineConfig({
   define: { 'process.env': {} },
   resolve: {
     alias: {
+      '@ducklab/core': fileURLToPath(new URL('../core/src/main.ts', import.meta.url)),
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
     extensions: [

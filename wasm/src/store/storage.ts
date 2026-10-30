@@ -3,7 +3,7 @@ import { get, set } from "idb-keyval";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
-const supportedTypes = ['csv', 'parquet', 'g.html', 'isql'];
+const supportedTypes = ['csv', 'parquet', 'g.html', 'md'];
 
 export const useStorageStore = defineStore('storage', () => {
     const root = ref<FileSystemReference>();
@@ -97,7 +97,7 @@ export async function createReference(file: FileSystemFileHandle | FileSystemDir
         path: path,
         children: [],
         type: type as any,
-        isCode: (type === 'isql') || (type === 'html'),
+        isCode: (type === 'md') || (type === 'html'),
         handle: file,
         permission: await file.queryPermission(),
     };

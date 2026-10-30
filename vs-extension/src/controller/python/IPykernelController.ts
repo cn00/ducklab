@@ -28,7 +28,7 @@ export class IPykernelController {
 
         this._controller = vscode.notebooks.createNotebookController(
             this.id,
-            'isql',
+            'ducklab-markdown',
             crypto.randomUUID().toString()
         );
 

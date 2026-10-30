@@ -36,7 +36,7 @@ describe('SQL Only database location', () => {
     });
 
     test.each([
-        URI.file('/workspace/notebooks/report.isql'),
+        URI.file('/workspace/notebooks/report.md'),
         URI.parse('untitled:Untitled-1')
     ])('stores the database under the home directory for %s', async uri => {
         const registry = new TableQueryRegistry();
@@ -71,7 +71,7 @@ describe('SQL Only database location', () => {
         const registry = new TableQueryRegistry();
         const controller = new DucklabSQLController({ tempPath: '/system-temp', workingDir: '/workspace' }, registry);
         try {
-            await controller.resolveKernel({ uri: URI.file('/workspace/unsigned.isql') } as vscode.NotebookDocument);
+            await controller.resolveKernel({ uri: URI.file('/workspace/unsigned.md') } as vscode.NotebookDocument);
             expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('ducklab');
             expect(get).toHaveBeenCalledWith('allowUnsignedExtensions', false);
             expect(DuckdbDataSource).toHaveBeenCalledWith(expect.any(String),
@@ -91,7 +91,7 @@ describe('SQL Only database location', () => {
         } as vscode.WorkspaceConfiguration));
         const registry = new TableQueryRegistry();
         const controller = new DucklabSQLController({ tempPath: '/system-temp', workingDir: '/workspace' }, registry);
-        const uri = URI.file('/workspace/report.isql');
+        const uri = URI.file('/workspace/report.md');
         try {
             await controller.resolveKernel({ uri } as vscode.NotebookDocument);
             expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('ducklab', uri);

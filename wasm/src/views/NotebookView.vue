@@ -2,13 +2,16 @@
     <div class="page-container">
         <div class="cells">
             <v-btn class="toolbar-btn" @click="newCell()" color="primary" size="sm" outline rounded>
-                <v-tooltip activator="parent" top>New cell</v-tooltip>
+                <v-tooltip activator="parent" top>New SQL cell</v-tooltip>
+                <v-icon icon="$plus" size="sm"></v-icon>
+            </v-btn>
+            <v-btn class="toolbar-btn" @click="newMarkdownCell()" color="primary" size="sm" outline rounded>
+                <v-tooltip activator="parent" top>New Markdown cell</v-tooltip>
                 <v-icon icon="$plus" size="sm"></v-icon>
             </v-btn>
             <div class="cell-container" v-for="cell of notebookStore.cells" :key="cell.id">
-                <CellComponent @new-cell="() => newCell(cell as any)" @delete-cell="() => deleteCell(cell as any)"
-                    @cell-renamed="(name) => cellRenamed(cell as any, name)" :cell="(cell as any)">
-                </CellComponent>
+                <NotebookCellView @new-cell="() => newCell(cell as any)" @delete-cell="() => deleteCell(cell as any)"
+                    :cell="(cell as any)" />
                 <v-btn class="toolbar-btn" @click="newCell(cell as any)" color="primary" size="sm" outline rounded>
                     <v-tooltip activator="parent" top>New cell</v-tooltip>
                     <v-icon icon="$plus" size="sm"></v-icon>
@@ -20,11 +23,11 @@
 </template>
 <script lang="ts" setup>
 
-import { TabularDataset, NotebookCell } from "@ducklab/core";
+import { NotebookCell } from "@ducklab/core";
 import { DuckdbDataSource } from "@/entities/duckdb_wasm/DuckdbDataSource";
 import { useNotebookStore } from "@/store/notebook";
 import { onMounted } from "vue";
-import CellComponent from "@/components/CellComponent.vue";
+import NotebookCellView from "@/components/NotebookCellView.vue";
 import { PropType } from "vue";
 import { ref } from "vue";
 
@@ -43,18 +46,13 @@ onMounted(() => {
     if (notebookStore.cells.length === 0) notebookStore.initNotebook();
 });
 
-function cellRenamed(ds: TabularDataset, name: string) {
-    try {
-        notebookStore.renameDataset(ds, name);
-    }
-    catch {
-        null;
-    }
-}
-
 function newCell(afterCell?: NotebookCell) {
     let cell = notebookStore.createCell(afterCell);
     console.log("Created: ", cell.id);
+}
+
+function newMarkdownCell(afterCell?: NotebookCell) {
+    notebookStore.createMarkdownCell(afterCell ?? null);
 }
 
 function deleteCell(cell: NotebookCell) {

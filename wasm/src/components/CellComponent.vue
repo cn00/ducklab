@@ -2,33 +2,10 @@
   <div class="container" @keydown="onKeyChange" @keyup="onKeyChange" @focusout="onFocusOut">
     <div class="cell-sidebar">
       <div class="inputs">
-        <div v-if="props.cell.type !== CellType.SQL_RAW" class="text-field" color="primary">
+        <div class="text-field" color="primary">
           <label>Name</label>
-          <input @input="onNameInput" :value="props.cell.name" :class="{ error: !isNameValid }" ref="nameInput" />
+          <input @input="onNameInput" :value="props.cell.name" />
         </div>
-        <v-select class="dropdown" :model-value="cellType" @update:model-value="onTypeChange" :items="['View', 'Raw']"
-          density="compact" :hide-details="true">
-          <template #label>
-            <label class="dropdown-label">Cell Type</label>
-          </template>
-
-          <template #selection="{ item }">
-
-            <span style="font-size: 12px; padding-left: 5px;">{{ item.title }}</span>
-          </template>
-
-          <template #item="{ props, item }">
-            <v-list-item v-bind="props" density="compact">
-              <template #title>
-                <v-tooltip activator="parent" top>{{ item.value === 'View' ? constants.TOOLTIP_CELLTYPE_VIEW :
-                  constants.TOOLTIP_CELLTYPE_RAW }}</v-tooltip>
-
-                <span style="font-size: 12px"> {{
-                  item.title }}</span>
-              </template>
-            </v-list-item>
-          </template>
-        </v-select>
       </div>
       <CellToolbar class="toolbar" @execute="execute" @delete="emit('delete-cell')" @new="emit('new-cell')">
       </CellToolbar>
@@ -63,10 +40,9 @@ import { PropType } from 'vue';
 import CellToolbar from './CellToolbar.vue';
 import QueryEditor from "./QueryEditor.vue";
 import { useNotebookStore } from '@/store/notebook';
-import constants from '@/constants/constants';
 import { onMounted } from 'vue';
 import { computed } from 'vue';
-import { CellType, NotebookCell } from '@ducklab/core';
+import { NotebookCell } from '@ducklab/core';
 
 
 let props = defineProps({
@@ -75,7 +51,7 @@ let props = defineProps({
     required: true
   }
 });
-let emit = defineEmits(['new-cell', 'delete-cell', 'cell-renamed']);
+let emit = defineEmits(['new-cell', 'delete-cell']);
 let columns = ref<TableColumn[]>([]);
 let rows = ref<any[]>([]);
 let loading = ref(false);
@@ -86,11 +62,8 @@ let pagination = ref({
 let showError = ref(false);
 let error = ref(null);
 let notebookStore = useNotebookStore();
-let nameInput = ref<HTMLInputElement | null>(null);
-let isNameValid = ref(true);
 let keyMap: { [key: string]: boolean; } = {};
 
-let cellType = computed(() => props.cell.type === CellType.SQL_RAW ? "Raw" : "View");
 let input = computed(() => props.cell.input);
 let limit = computed(() => props.cell.notebook.config.previewLimit);
 let executionTime = ref<number | null>(null);
@@ -99,18 +72,9 @@ onMounted(() => {
   console.log("Mounted: ", props.cell.input);
 });
 
-function onTypeChange(type: string) {
-  props.cell.setType(type === 'Raw' ? CellType.SQL_RAW : CellType.SQL_VIEW);
-  notebookStore.unsavedChanges = true;
-}
-
 function onNameInput(event: any) {
-  let idx = notebookStore.cells.findIndex(cell => cell.name === event.target.value);
-  isNameValid.value = idx < 0;
+  props.cell.name = event.target.value;
   notebookStore.unsavedChanges = true;
-  if (isNameValid.value) {
-    emit('cell-renamed', event.target.value);
-  }
 }
 
 async function onKeyChange(event: KeyboardEvent) {
@@ -167,9 +131,6 @@ async function onRequest(params: any) {
   console.log("Req args: ", params);
   loading.value = true;
 
-  if (params.sortBy) {
-    props.cell.dataset?.setSort(params.sortBy);
-  }
   await fetchResults();
   pagination.value.sortBy = params.sortBy;
   // pagination.value.rowsNumber = rows.value.length;

@@ -41,7 +41,7 @@ import Logo from '@/components/Logo.vue';
                     Simple File Format
                 </p>
                 <p class="feature-detail">
-                    Ducklab uses .isql file format which, unlike ipynb, is git-friendly and human readable.
+                    Ducklab uses Markdown Notebook files, so SQL cells and notes stay readable in ordinary Markdown tools.
                 </p>
             </div>
             <div class="feature">

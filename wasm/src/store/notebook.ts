@@ -1,7 +1,7 @@
 // Utilities
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import { TabularDataset, IFetchQuery, IsqlSerializer, Notebook, NotebookCell, CellType, TabularDataSource } from '@ducklab/core';
+import { MarkdownNotebookSerializer, Notebook, NotebookCell, CellType, TabularDataSource } from '@ducklab/core';
 // import { CellType, NotebookCell } from '@/entities/NotebookCell';
 import { FileSystemReference } from '@/entities/FileSystemReference';
 import { createReference } from './storage';
@@ -17,11 +17,11 @@ export const useNotebookStore = defineStore('notebook', () => {
   let dataSource: TabularDataSource | undefined;
   const unsavedChanges = ref(false);
   const currFile = ref<FileSystemReference>({
-    name: 'untitled.isql',
+    name: 'untitled.md',
     children: [],
     path: '',
     permission: 'denied',
-    type: 'isql',
+    type: 'md',
     isCode: true,
   });
 
@@ -35,7 +35,7 @@ export const useNotebookStore = defineStore('notebook', () => {
     unsavedChanges.value = false;
     const sql = await get("notebook");
     if (sql) {
-      loadFromText("untitled.sql", sql);
+      loadFromText("untitled.md", sql);
     }
 
     setInterval(async () => {
@@ -48,25 +48,23 @@ export const useNotebookStore = defineStore('notebook', () => {
   function createCell(afterCell: NotebookCell | null = null) {
     if (!notebook.value.dataSource) throw Error("Datasource is undefined");
 
-    // let inputQuery = "select * from '<csv|parquet|cellname>'";
     let inputQuery = "select * from '*.csv'";
     let index = -1;
     if (afterCell) {
       index = notebook.value.cells.findIndex(ds => ds.id === afterCell.id);
     }
 
-    if (index >= 0) {
-      inputQuery = `select * from '${notebook.value.cells[index].name}'`;
-    }
-    const query: IFetchQuery = {
-      fields: [{ expression: "*" }],
-      from: { rawQuery: inputQuery }
-    };
-    const dataset = new TabularDataset(`dataset_${dsIndex.value}`, query, notebook.value.dataSource, []);
-    const cell = new NotebookCell(Math.random().toString(), dataset.name, notebook.value as Notebook, inputQuery, CellType.SQL_VIEW);
-    cell.dataset = dataset;
+    const cell = new NotebookCell(Math.random().toString(), `sql_${dsIndex.value}`, notebook.value as Notebook, inputQuery, CellType.SQL_RAW);
     notebook.value.cells.splice(index + 1, 0, cell);
     dsIndex.value++;
+    unsavedChanges.value = true;
+    return cell;
+  }
+
+  function createMarkdownCell(afterCell: NotebookCell | null = null) {
+    const index = afterCell ? notebook.value.cells.findIndex(cell => cell.id === afterCell.id) : -1;
+    const cell = new NotebookCell(Math.random().toString(), 'unnamed', notebook.value, '', CellType.MD);
+    notebook.value.cells.splice(index + 1, 0, cell);
     unsavedChanges.value = true;
     return cell;
   }
@@ -90,15 +88,8 @@ export const useNotebookStore = defineStore('notebook', () => {
     return null;
   }
 
-  function renameDataset(ds: TabularDataset, name: string) {
-    for (const cell of notebook.value.cells) {
-      if (cell.name === name) throw Error("Cannot have duplicate names");
-    }
-    ds.name = name;
-  }
-
   function exportToText() {
-    const serializer = new IsqlSerializer();
+    const serializer = new MarkdownNotebookSerializer();
     const result = serializer.serialize(notebook.value as Notebook);
     return result;
   }
@@ -115,7 +106,7 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   function loadFromText(name: string, text: string) {
-    const serializer = new IsqlSerializer();
+    const serializer = new MarkdownNotebookSerializer();
     const nb = serializer.parse(text, name);
     nb.dataSource = dataSource;
     notebook.value = nb;
@@ -145,8 +136,8 @@ export const useNotebookStore = defineStore('notebook', () => {
   }
 
   return {
-    setDataSource, createCell, renameDataset, deleteCell,
-    getCell, load, exportToSql: exportToText, save,
+    setDataSource, createCell, createMarkdownCell, deleteCell,
+    getCell, load, exportToText, save,
     cells: computed(() => notebook.value.cells), dataSource: notebook.value.dataSource,
     unsavedChanges,
     initNotebook,
@@ -161,7 +152,7 @@ async function getNewFileHandle(): Promise<FileSystemFileHandle> {
       {
         description: 'SQL file',
         accept: {
-          'text/sql': ['.isql'],
+          'text/markdown': ['.md'],
         },
       },
     ],

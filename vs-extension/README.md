@@ -47,7 +47,8 @@ DuckLab for VS Code provides data analysis features for SQL, PySpark and Python.
 - Ducklab Spark Kernel allows running pyspark code using `duckdb.experimental.spark` module (exposed as `spark`, a `SparkSession` instance).
 - Import Databricks `.py` notebooks and preview in a user-friendly VS Code Notebook window.
 - Use any python, venv or conda environment detected by VS Code Python extension.
-- Git-friendly `.isql` format. This format is plain text and human readable. 
+- Git-friendly Markdown Notebook format. SQL and Python fenced blocks become executable cells; Markdown stays readable in any Markdown editor.
+- Breaking change: `.isql` notebooks are no longer recognized. Convert `-- %%` cell headers to Markdown code fences before opening them with Ducklab.
 - Ducklab doesn't use `ipynb` format which stores cell outputs in the file and pollutes git. It also makes diff in pull requests unreadable.
 - Cell magics for convenience.
 
@@ -55,9 +56,15 @@ DuckLab for VS Code provides data analysis features for SQL, PySpark and Python.
 
 ### Using Ducklab SQL Kernel (no dependencies required)
 
-1. Create a new `.isql` file.
-2. Select kernel `SQL Only`
-3. Run SQL queries e.g. `select * from 'data/MOCK_DATA.csv';`
+1. Create a `.md` file and choose **Open With > Ducklab** when you want notebook cells. Ordinary Markdown editing and preview remain available.
+2. Select kernel `SQL Only`.
+3. Add SQL inside a fenced block and run the cell:
+
+```sql
+select * from 'data/MOCK_DATA.csv';
+```
+
+Use ```` ```sql | name ```` or ```` ```python | name ```` to name a cell. Text between code fences is a Markdown cell. Separate adjacent Markdown cells with `<!-- ducklab:cell -->`.
 
 The SQL Only kernel stores each notebook's database in `~/.ducklab` (the `.ducklab` directory in your home directory). Ducklab creates this directory automatically when opening the database. Existing databases in the system temporary directory are not migrated automatically.
 
@@ -91,7 +98,7 @@ Unsigned extensions execute native code with your user permissions. Only enable 
 
 #### SQL environment variables
 
-Place a `.env` file next to the `.isql` notebook to provide values for SQL cells. Ducklab expands `$NAME` and `${NAME}` before running SQL in the SQL Only, Python/SQL, and PySpark/SQL kernels. Python cells are not modified. The `.env` file is re-read for each SQL cell; its values override matching extension process environment variables. If a referenced name is missing from both sources, execution stops and reports the missing name.
+Place a `.env` file next to the `.md` notebook to provide values for SQL cells. Ducklab expands `$NAME` and `${NAME}` before running SQL in the SQL Only, Python/SQL, and PySpark/SQL kernels. Python cells are not modified. The `.env` file is re-read for each SQL cell; its values override matching extension process environment variables. If a referenced name is missing from both sources, execution stops and reports the missing name.
 
 For example, copy `sample/.env.example` to the directory containing your notebook and use:
 
@@ -115,7 +122,7 @@ Single-query tabular results use backend pagination in the SQL Only, Python/SQL,
 ### Using Ducklab Python Kernel
 
 1. Make sure python or Anaconda is installed.
-2. Create a new `.isql` file.
+2. Open a `.md` file with Ducklab, or create one.
 3. Select kernel `Python/SQL`
 4. Click `Python Environment` in the notebook toolbar and select an interpreter. The selection panel marks the currently selected interpreter.
 5. `ducklab-python` kernel will have `db` variable (duckdb connection) already initialized for you.
@@ -124,7 +131,7 @@ Single-query tabular results use backend pagination in the SQL Only, Python/SQL,
 ### Using Ducklab Spark Kernel
 
 1. Make sure python or Anaconda is installed.
-2. Create a new `.isql` file.
+2. Open a `.md` file with Ducklab, or create one.
 3. Select kernel `PySpark/SQL`
 4. Click `Python Environment` in the notebook toolbar and select an interpreter.
 5. `ducklab-spark` kernel will have `spark` variable (SparkSession) already initialized for you.

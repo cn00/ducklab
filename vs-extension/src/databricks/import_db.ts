@@ -16,7 +16,7 @@ export const importDatabricksPyFile = async (file: vscode.Uri) => {
         let serializer = new NotebookSerializer(serializerDb);
         let notebookData = await serializer.deserializeNotebook(array, null);
         // let fileDirectory = Utils.dirname(file);
-        // let fileName = Utils.basename(file).replace(".py", ".isql");
+        // Imported notebooks are opened as untitled Ducklab Markdown notebooks.
 
         // let newUri = vscode.Uri.parse('untitled:' + vscode.Uri.joinPath(fileDirectory, fileName));
         await createUntitledNotebook(notebookData);
@@ -31,7 +31,7 @@ async function createUntitledNotebook(notebookData: vscode.NotebookData) {
 
     // let edit = vscode.NotebookEdit.insertCells(0, notebookData.cells);
     // edit.newNotebookMetadata = notebookData.metadata;
-    let notebook = await vscode.workspace.openNotebookDocument("isql", notebookData);
+    let notebook = await vscode.workspace.openNotebookDocument("ducklab-markdown", notebookData);
     vscode.window.showNotebookDocument(notebook);
 
     // vscode.workspace.applyEdit(edit).then(async (success) => {

@@ -1,18 +1,18 @@
 {
-  "name": "ducklab",
-  "displayName": "Ducklab",
-  "description": "Interactive SQL/Python Notebooks. Powered by DuckDB",
-  "version": "0.5.2",
+  "name": "duckcb",
+  "displayName": "DuckCB",
+  "description": "Interactive SQL/Python Cook books. Powered by DuckDB",
+  "version": "0.6.0",
   "license": "Apache-2.0",
-  "publisher": "ducklake",
+  "publisher": "cnoo",
   "icon": "./assets/logo_dark.png",
-  "homepage": "https://ducklake.io/ducklab",
-  "repository": "https://github.com/ducklake-hq/ducklab",
+  "homepage": "https://cn00.github.io/ducklab",
+  "repository": "https://github.com/cn00/ducklab",
   "scripts": {
     "dev": "rollup --watch --config rollup.config.ts --configPlugin @rollup/plugin-typescript",
     "build": "rollup --config rollup.config.ts --configPlugin @rollup/plugin-typescript",
     "package": "./package.sh",
-    "publish": "find ./dist -name ducklab*.vsix -exec sh -c 'npx vsce publish --packagePath {} -p $VSCE_PAT || exit 1' \\;",
+    "publish": "find ./dist -name duckcb*.vsix -exec sh -c 'npx vsce publish --packagePath {} -p $VSCE_PAT || exit 1' \\;",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "jest"
   },
@@ -20,7 +20,7 @@
     "vscode": "^1.85.0"
   },
   "keywords": [
-    "notebookKernelIsql",
+    "notebookKernelDucklabMarkdown",
     "notebookRenderer",
     "sql",
     "notebooks",
@@ -41,7 +41,7 @@
   "activationEvents": [
     "onRenderer:ducklab.tableRenderer",
     "onNotebook:ipynb-ducklab",
-    "onNotebook:isql"
+    "onNotebook:ducklab-markdown"
   ],
   "contributes": {
     "configuration": {
@@ -70,11 +70,11 @@
     },
     "notebooks": [
       {
-        "type": "isql",
+        "type": "ducklab-markdown",
         "displayName": "Ducklab",
         "selector": [
           {
-            "filenamePattern": "*.isql"
+            "filenamePattern": "*.md"
           }
         ]
       }
@@ -104,7 +104,7 @@
     "menus": {
       "notebook/toolbar": [
         {
-          "when": "notebookType == isql",
+          "when": "notebookType == ducklab-markdown",
           "command": "ducklab.selectPythonEnvironment",
           "group": "navigation@1"
         }
@@ -149,7 +149,6 @@
     "@duckdb/node-bindings-linux-arm64": "2.0.0-r.1",
     "@duckdb/node-bindings-darwin-x64": "2.0.0-r.1",
     "@duckdb/node-bindings-darwin-arm64": "2.0.0-r.1",
-    "@ducklab/core": "0.4.1",
     "@nteract/messaging": "7.0.*",
     "apache-arrow": "17.0.*",
     "get-port": "7.1.0",

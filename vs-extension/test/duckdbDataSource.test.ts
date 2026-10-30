@@ -29,7 +29,7 @@ describe('DuckDB database initialization', () => {
     }
 
     test('creates missing database parent directories before running SQL', async () => {
-        const dbPath = join(tempPath, 'missing', 'ducklab', 'notebook.isql.db');
+        const dbPath = join(tempPath, 'missing', 'ducklab', 'notebook.md.db');
         const source = createSource(dbPath);
 
         const result = await source.queryNative('SELECT 42 AS answer');
@@ -39,7 +39,7 @@ describe('DuckDB database initialization', () => {
     });
 
     test('preserves an existing database when reconnecting', async () => {
-        const dbPath = join(tempPath, 'notebook.isql.db');
+        const dbPath = join(tempPath, 'notebook.md.db');
         const source = createSource(dbPath);
         await source.queryNative('CREATE TABLE saved AS SELECT 42 AS answer');
         source.dispose();
@@ -70,7 +70,7 @@ describe('DuckDB database initialization', () => {
     test('reports a parent path blocked by a file without overwriting it', async () => {
         const parentPath = join(tempPath, 'blocked');
         await writeFile(parentPath, 'keep');
-        const source = createSource(join(parentPath, 'notebook.isql.db'));
+        const source = createSource(join(parentPath, 'notebook.md.db'));
 
         await expect(source.connect()).rejects.toThrow();
         expect(await readFile(parentPath, 'utf8')).toBe('keep');

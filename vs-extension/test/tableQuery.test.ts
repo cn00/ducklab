@@ -36,7 +36,7 @@ describe('server-side table query', () => {
         const registry = {
             register: jest.fn((id: string, _uri: unknown, _cell: string, fetch: (request: TableRequest) => Promise<any>) => queries.set(id, fetch)),
         } as unknown as TableQueryRegistry;
-        const uri = { toString: () => 'file:///workspace/table.isql' } as any;
+        const uri = { toString: () => 'file:///workspace/table.md' } as any;
 
         const initial = await createPagedTableResult('SELECT id, name FROM items', runQuery, registry, uri, 'cell-3');
 

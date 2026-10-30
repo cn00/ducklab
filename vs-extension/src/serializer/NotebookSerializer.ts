@@ -9,7 +9,6 @@ export class NotebookSerializer implements vscode.NotebookSerializer {
 
   readonly languageMap = {
     sql: CellType.SQL_RAW,
-    "sql-view": CellType.SQL_VIEW,
     plaintext: CellType.TEXT,
     markdown: CellType.MD,
     python: CellType.PYTHON
@@ -17,7 +16,6 @@ export class NotebookSerializer implements vscode.NotebookSerializer {
 
   readonly cellTypeMap = {
     [CellType.SQL_RAW]: "sql",
-    [CellType.SQL_VIEW]: "sql-view",
     [CellType.TEXT]: "plaintext",
     [CellType.MD]: "markdown",
     [CellType.PYTHON]: "python"
@@ -61,6 +59,8 @@ export class NotebookSerializer implements vscode.NotebookSerializer {
     let nbData = new vscode.NotebookData(cells);
     nbData.metadata = {
       id: notebook.id,
+      markdownSource: notebook.sourceText,
+      markdownSourceSignature: notebook.sourceSignature,
     };
     console.log("Loaded: ", nbData);
     return nbData;
@@ -72,6 +72,8 @@ export class NotebookSerializer implements vscode.NotebookSerializer {
   ): Promise<Uint8Array> {
 
     let notebook = new Notebook();
+    notebook.sourceText = data.metadata?.markdownSource;
+    notebook.sourceSignature = data.metadata?.markdownSourceSignature;
     for (let i = 0; i < data.cells.length; i++) {
       let name = data.cells[i].metadata?.name ?? 'unnamed';
       let cellType;

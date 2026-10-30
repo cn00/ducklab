@@ -102,10 +102,10 @@ export class DuckdbDataSource extends TabularDataSource {
 
   }
 
-  getJsonType(type: DuckDBType) {
+  getJsonType(type: DuckDBType): IFieldInfo['type'] {
     if ([DuckDBTypeId.INTEGER, DuckDBTypeId.FLOAT, DuckDBTypeId.DOUBLE, DuckDBTypeId.DECIMAL].includes(type.typeId)) return "number";
     if ([DuckDBTypeId.BOOLEAN, DuckDBTypeId.BIT].includes(type.typeId)) return "boolean";
-    if ([DuckDBTypeId.DATE].includes(type.typeId)) return "date";
+    if ([DuckDBTypeId.DATE].includes(type.typeId)) return "datetime";
     if ([
       DuckDBTypeId.TIMESTAMP,
       DuckDBTypeId.TIMESTAMP_NS,

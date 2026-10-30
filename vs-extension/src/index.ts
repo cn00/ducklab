@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { NotebookSerializer } from './serializer/NotebookSerializer';
-import { IsqlSerializer } from "@ducklab/core";
+import { MarkdownNotebookSerializer } from "@ducklab/core";
 import { DucklabPythonController } from './controller/python/DucklabPythonController';
 import { importDatabricksPyFile } from './databricks/import_db';
 import { DucklabSparkController } from './controller/python/DucklabSparkController';
@@ -32,8 +32,8 @@ export function activate(context: vscode.ExtensionContext) {
             context.subscriptions.push(new DucklabSQLController({ tempPath: path, workingDir: base_path }, tableQueries));
             context.subscriptions.push(vscode.commands.registerCommand('ducklab.selectPythonEnvironment', async () => {
                 const notebook = vscode.window.activeNotebookEditor?.notebook;
-                if (!notebook || notebook.notebookType !== 'isql') {
-                    await vscode.window.showWarningMessage('Open an .isql notebook before selecting a Python environment.');
+                if (!notebook || notebook.notebookType !== 'ducklab-markdown') {
+                    await vscode.window.showWarningMessage('Open a Ducklab Markdown notebook before selecting a Python environment.');
                     return;
                 }
                 try {
@@ -48,9 +48,9 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    let serializerSql = new IsqlSerializer();
+    let serializerSql = new MarkdownNotebookSerializer();
     context.subscriptions.push(
-        vscode.workspace.registerNotebookSerializer('isql', new NotebookSerializer(serializerSql))
+        vscode.workspace.registerNotebookSerializer('ducklab-markdown', new NotebookSerializer(serializerSql))
     );
 
     vscode.commands.registerCommand("ducklab.importDatabricksPy", importDatabricksPyFile);

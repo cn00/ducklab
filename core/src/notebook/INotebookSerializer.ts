@@ -1,4 +1,4 @@
-import { Notebook } from '@/notebook/Notebook';
+import { Notebook } from './Notebook';
 
 export interface INotebookSerializer {
     serialize(notebook: Notebook): string;

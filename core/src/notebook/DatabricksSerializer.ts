@@ -1,6 +1,6 @@
-import { INotebookSerializer } from '@/notebook/INotebookSerializer';
-import { Notebook } from '@/notebook/Notebook';
-import { CellType, NotebookCell } from '@/notebook/NotebookCell';
+import { INotebookSerializer } from './INotebookSerializer';
+import { Notebook } from './Notebook';
+import { CellType, NotebookCell } from './NotebookCell';
 
 
 export class DatabricksSerializer implements INotebookSerializer {
@@ -9,7 +9,6 @@ export class DatabricksSerializer implements INotebookSerializer {
     cellHeader = {
         [CellType.MD]: "# MAGIC %md\n",
         [CellType.SQL_RAW]: "# MAGIC %sql\n",
-        [CellType.SQL_VIEW]: "# MAGIC %sql\n",
         [CellType.TEXT]: "# MAGIC %md\n",
         [CellType.PYTHON]: "",
     };

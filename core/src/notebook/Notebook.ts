@@ -1,5 +1,5 @@
-import { TabularDataSource } from '@/entities/tabular/TabularDataSource';
-import { NotebookCell } from "@/notebook/NotebookCell";
+import { TabularDataSource } from '../entities/tabular/TabularDataSource';
+import { NotebookCell } from "./NotebookCell";
 
 export interface IUserConfig {
     previewLimit?: number;
@@ -12,6 +12,8 @@ export interface INotebookConfig extends IUserConfig {
 export class Notebook {
     cells: NotebookCell[] = [];
     id: string;
+    sourceText?: string;
+    sourceSignature?: string;
     dataSource?: TabularDataSource;
     config: INotebookConfig;
 

@@ -7,6 +7,13 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from "@rollup/plugin-json";
 import copy from "rollup-plugin-copy";
 import { builtinModules } from 'module';
+import alias from '@rollup/plugin-alias';
+import { fileURLToPath } from 'node:url';
+
+const coreEntry = fileURLToPath(new URL('../core/src/main.ts', import.meta.url));
+const typescriptOptions = {
+    include: ['src/**/*.ts', '../core/src/**/*.ts'],
+};
 
 // import { readFileSync, writeFileSync } from 'fs';
 
@@ -30,7 +37,8 @@ const config = [
     {
         plugins: [
             del({ targets: 'out/*', hook: 'buildStart' }),
-            typescript(),
+            alias({ entries: [{ find: '@ducklab/core', replacement: coreEntry }] }),
+            typescript(typescriptOptions),
             json(),
             nodeResolve({ preferBuiltins: true }),
             commonjs({
@@ -77,7 +85,8 @@ const config = [
     },
     {
         plugins: [
-            typescript(),
+            alias({ entries: [{ find: '@ducklab/core', replacement: coreEntry }] }),
+            typescript(typescriptOptions),
             nodeResolve({ preferBuiltins: true }),
         ],
         input: 'src/renderer.ts',

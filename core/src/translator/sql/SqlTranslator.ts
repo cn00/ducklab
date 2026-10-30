@@ -2,18 +2,18 @@
 import { prepareTable } from './table';
 import { encloseParenthesis, quoteDouble } from './helpers/enclose_fields';
 import { dotCombine } from './helpers/combine';
-import { PlainColumn } from '@/translator/sql/entities/PlainColumn';
-import { CalculatedColumn } from '@/translator/sql/entities/CalculatedColumn';
-import { FilterGroup } from '@/translator/sql/entities/FilterGroup';
-import { Pagination } from '@/translator/sql/entities/Pagination';
+import { PlainColumn } from './entities/PlainColumn';
+import { CalculatedColumn } from './entities/CalculatedColumn';
+import { FilterGroup } from './entities/FilterGroup';
+import { Pagination } from './entities/Pagination';
 import type { ISqlConfig } from './ISqlConfig';
-import type { IQueryTranslator } from '@/entities/IQueryTranslator';
-import type { IFilterGroup } from '@/language/IFilter';
-import type { ICalculatedColumn, IExpression, IPlainField } from '@/language/IExpression';
-import type { IFetchQuery } from '@/language/IFetchQuery';
-import type { IEntity } from '@/language/IEntity';
-import { IRawQuery } from '@/language/IRawQuery';
-import { IOrderBy } from '@/language/IOrderBy';
+import type { IQueryTranslator } from '../../entities/IQueryTranslator';
+import type { IFilterGroup } from '../../language/IFilter';
+import type { ICalculatedColumn, IExpression, IPlainField } from '../../language/IExpression';
+import type { IFetchQuery } from '../../language/IFetchQuery';
+import type { IEntity } from '../../language/IEntity';
+import { IRawQuery } from '../../language/IRawQuery';
+import { IOrderBy } from '../../language/IOrderBy';
 
 export class SqlTranslator implements IQueryTranslator {
   cfg: ISqlConfig;

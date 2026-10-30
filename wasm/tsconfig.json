@@ -17,6 +17,9 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
+      "@ducklab/core": [
+        "../core/src/main.ts"
+      ],
       "@/core/*": [
         "./core/*"
       ],

@@ -39,6 +39,22 @@
 
 DuckLab provides local SQL notebook experience for adhoc data analysis. It uses DuckDB to process your data within browser and VS Code. No data leaves your machine.
 
+Ducklab notebooks use ordinary `.md` files. SQL and Python fenced code blocks become notebook cells, while Markdown text remains readable in standard Markdown tools.
+
+This is a breaking change: the new version does not read the former `.isql` cell format. Convert legacy `-- %%` headers to Markdown fences manually before opening those notebooks with Ducklab.
+
+Example:
+
+````markdown
+# Report
+
+```sql
+select * from 'data.csv';
+```
+````
+
+Open a Markdown file with Ducklab in VS Code using **Open With**. The regular Markdown editor and preview remain available.
+
 ## 🏁 Getting Started <a name = "getting_started"></a>
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.

@@ -10,7 +10,7 @@ interface RawNotebookCell {
   cell_type: 'code' | 'markdown';
 }
 
-export class IsqlSerializer implements vscode.NotebookSerializer {
+export class IpynbSerializer implements vscode.NotebookSerializer {
 
   async deserializeNotebook(
     content: Uint8Array,

@@ -2,7 +2,7 @@
 
 export interface FileSystemReference {
     name: string;
-    type: "csv" | "parquet" | "folder" | "isql" | "html";
+    type: "csv" | "parquet" | "folder" | "md" | "html";
     path: string;
     handle?: FileSystemFileHandle | FileSystemDirectoryHandle;
     file?: File,

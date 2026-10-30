@@ -2,7 +2,7 @@ import type { IFetchQuery } from '../../language/IFetchQuery';
 import type { TabularDataSource } from './TabularDataSource';
 import type { ITableInfo } from './ITableInfo';
 import type { IFieldInfo } from './IFieldInfo';
-import { IRawQuery } from '@/language/IRawQuery';
+import { IRawQuery } from '../../language/IRawQuery';
 
 export class TabularDataset {
   protected _query: IFetchQuery;

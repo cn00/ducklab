@@ -7,7 +7,7 @@ import { expandNotebookSql } from '../src/controller/notebookSqlEnvironment';
 
 const readFile = vscode.workspace.fs.readFile as jest.Mock;
 
-function notebookUri(filePath = '/workspace/notebooks/report.isql'): vscode.Uri {
+function notebookUri(filePath = '/workspace/notebooks/report.md'): vscode.Uri {
     const uri = {
         scheme: 'file',
         path: filePath,

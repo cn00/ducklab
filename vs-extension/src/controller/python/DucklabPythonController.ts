@@ -18,7 +18,7 @@ import { executePythonQuery, indentPython, pandasDataFrameFormatterCode, PANDAS_
 export class DucklabPythonController implements IDisposable {
 
     readonly id = 'ducklab';
-    readonly notebookType = 'isql';
+    readonly notebookType = 'ducklab-markdown';
     readonly supportedLanguages = ['sql', 'markdown', 'plaintext', 'python'];
     readonly label: string = 'Python/SQL';
     readonly description?: string | undefined;

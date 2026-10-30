@@ -13,7 +13,7 @@ import { createPagedTableResult, ServerTableData, TableQueryRegistry, TABLE_MIME
 export class DucklabSQLController {
 
     readonly id = 'ducklab-sql';
-    readonly notebookType = 'isql';
+    readonly notebookType = 'ducklab-markdown';
     readonly supportedLanguages = ['sql', 'markdown', 'plaintext'];
     readonly label: string = 'SQL Only';
     readonly description?: string | undefined;
@@ -33,7 +33,7 @@ export class DucklabSQLController {
 
         this._controller = vscode.notebooks.createNotebookController(
             this.id,
-            'isql',
+            'ducklab-markdown',
             this.label
         );
 
@@ -101,7 +101,7 @@ export class DucklabSQLController {
     async executeHandler(cells: vscode.NotebookCell[], notebook: vscode.NotebookDocument, controller: vscode.NotebookController) {
         const kernel = await this.resolveKernel(notebook);
         for (const cell of cells) {
-            this._doExecution(cell, kernel, notebook.uri);
+            await this._doExecution(cell, kernel, notebook.uri);
         }
     }
 
