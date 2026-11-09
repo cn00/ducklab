@@ -8,7 +8,7 @@
 <div align="center">
 
 [![Status](https://img.shields.io/badge/status-active-success.svg)]()
-[![License](https://img.shields.io/badge/dynamic/json?label=version&query=version&url=https://raw.githubusercontent.com/cn00/ducklab/main/core/package.json)](https://ducklake.io/ducklab)
+[![License](https://img.shields.io/badge/dynamic/json?label=version&query=version&url=https://raw.githubusercontent.com/cn00/ducklab/main/core/package.json)](https://cn00.github.io/ducklab)
 [![GitHub Issues](https://img.shields.io/github/issues/cn00/ducklab.svg)](https://github.com/cn00/ducklab/issues)
 [![License](https://img.shields.io/badge/dynamic/json?label=license&query=license&url=https://raw.githubusercontent.com/cn00/ducklab/main/core/package.json)](/LICENSE)
 
@@ -16,9 +16,9 @@
 
 ---
 
-<p align="center"> Interactive SQL Notebooks | Powered by DuckDB
-    <br> 
-</p>
+<p align="center"> Interactive SQL Notebooks | Powered by DuckDB<br></p>
+
+<p align="center"><img align="center" width="1080" height="574" alt="duckcb" src="https://github.com/user-attachments/assets/a5fc94b1-550a-4a7c-bb3f-9dd0f1722f78" /></p>
 
 ## 📝 Table of Contents
 
