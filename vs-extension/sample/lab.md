@@ -1,11 +1,17 @@
 ```sql
-from duckdb_extensions()
-order by install_path desc;
+from duckdb_settings()
+order by name desc;
 ```
 
 ```sql
 load excel;
-from 'C:\\Users\\320311463\\OneDrive - Philips\\文档\\Copy of 1-Customer Data Form 1.xlsx'
+copy (from duckdb_settings())
+to 'c:\src\duckdb_settings.xlsx' (overwrite true, header true)
+```
+
+```sql
+-- load excel;
+from 'c:\src\duckdb_settings.xlsx'
 ```
 
 ### use postgresql
@@ -18,28 +24,12 @@ show schemas;
 ```
 
 ```sql
-use pg.spm;
+use pg.public;
 show tables;
 ```
 
 ```sql
-from pg.spm.Account;
-```
-
-#### copy table from postgresql to mssql
-
-```sql
-from duckdb_settings()
-```
-
-```sql
-create table if not exists msql.dbo.spmAccount as
-from pg.spm.Account;
-```
-
-```sql
--- show schemas;
-show tables;
+from pg.public.approval_nodes;
 ```
 
 ### use mssql
@@ -53,6 +43,28 @@ show schemas;
 ```
 
 ```sql
+use msql;
+show tables;
+```
+
+```sql
+create schema if not exists msql.from_pg;
+```
+
+```sql
+-- copy table from pg to mssql
+create table if not exists msql.from_pg.approval_nodes as
+from pg.public.approval_nodes;
+
+use msql.from_pg;
+show tables;
+```
+
+```sql
+from msql.from_pg.approval_nodes;
+```
+
+```sql
 CREATE LOGIN [weconnect]
 WITH PASSWORD = '$MSSQL_PASSWORD',
     CHECK_POLICY = ON;
@@ -62,16 +74,6 @@ USE [weconnect];
 CREATE USER [weconnect] FOR LOGIN [weconnect];
 
 ALTER ROLE [db_owner] ADD MEMBER [weconnect];
-```
-
-```sql
-use msql;
-show tables;
-```
-
-```sql
-create table if not exists ducklab.main.Account as
-from mdm.dbo.Account;
 ```
 
 ### use local csv

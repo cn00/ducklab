@@ -20,6 +20,9 @@
     <br> 
 </p>
 
+<p align="center"><img align="center" width="1080" height="574" alt="duckcb" src="https://github.com/user-attachments/assets/a5fc94b1-550a-4a7c-bb3f-9dd0f1722f78" /></p>
+
+
 ## 📝 Table of Contents
 
 - [📝 Table of Contents](#-table-of-contents)

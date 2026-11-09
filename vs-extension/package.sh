@@ -24,7 +24,10 @@ for p in "${targets[@]}"; do
  
     # # Package extension
     vsix_path="dist/${package_name}-${p}-${package_version}.vsix"
-    npx vsce package --no-dependencies --target "$p" --out "$vsix_path" --baseContentUrl https://raw.githubusercontent.com/ducklake-hq/ducklab/refs/heads/main/vs-extension/ --baseImagesUrl https://raw.githubusercontent.com/ducklake-hq/ducklab/refs/heads/main/vs-extension/
+    npx vsce package --no-dependencies --target "$p" \
+        --out "$vsix_path" \
+        --baseContentUrl https://raw.githubusercontent.com/cn00/ducklab/refs/heads/main/vs-extension/ \
+        --baseImagesUrl  https://raw.githubusercontent.com/cn00/ducklab/refs/heads/main/vs-extension/
 
     rm -rf dist/extracted/
     unzip "$vsix_path" -d dist/extracted/
@@ -49,6 +52,6 @@ for p in "${targets[@]}"; do
     cd dist/extracted/
     zip -r "../../$vsix_path" ./
     cd ../../
-    unzip -p "$vsix_path" "extension/node_modules/@duckdb/node-bindings-$p/duckdb.node" > /dev/null
+    # unzip -p "$vsix_path" "extension/node_modules/@duckdb/node-bindings-$p/duckdb.node" > /dev/null
 
 done
